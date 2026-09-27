@@ -11,11 +11,11 @@ The stored mapping from a Short code to a Target URL, optionally carrying an Exp
 _Avoid_: Short URL (as a name for the record), mapping, entry
 
 **Short code**:
-The 5–7 character base62 key that identifies a Link in its short URL. Unique across all Links, and never reused once issued.
+The case-sensitive key that identifies a Link in its short URL: 7 random base62 characters when generated. Unique across all Links, and never reused once issued.
 _Avoid_: Slug, hash, key, token
 
 **Custom alias**:
-A Short code chosen by the Creator rather than generated. Shares one namespace with generated Short codes.
+A Short code chosen by the Creator rather than generated: 3–32 characters of letters, digits, `-` and `_`. Shares one namespace with generated Short codes.
 _Avoid_: Vanity URL, custom slug
 
 **Target URL**:
