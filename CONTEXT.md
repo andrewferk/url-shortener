@@ -46,7 +46,7 @@ _Avoid_: User, client
 ### Operations
 
 **Redirect**:
-Resolving a Short code and answering the Visitor with a 302 to the Target URL.
+Answering a Visitor's request for a short URL: a 302 to the Target URL for a live Link, 410 Gone for an Expired or Deleted link, and 404 when no Link has that Short code.
 _Avoid_: Lookup, resolve, forward
 
 **Status page**:
