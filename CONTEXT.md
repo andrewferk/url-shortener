@@ -52,3 +52,15 @@ _Avoid_: Lookup, resolve, forward
 **Status page**:
 The public page reporting the service's uptime, Redirect latency percentiles, and request volume over time.
 _Avoid_: Dashboard, metrics page
+
+**Redirect event**:
+The record of one Redirect: its Short code, outcome, and duration.
+_Avoid_: Hit, click (reserved for future click analytics)
+
+**Probe**:
+A synthetic Redirect request made from outside the service to measure uptime.
+_Avoid_: Health check, ping
+
+**Canary link**:
+The Link that Probes follow. Its Redirects count toward Redirect latency but not request volume.
+_Avoid_: Test link, health link
