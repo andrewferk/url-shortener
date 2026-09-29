@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md): the Durable Object classes live in a separately deployed `links-data` Worker, which the Redirect Worker binds to.
+
 # Build on Cloudflare Workers in TypeScript, with sharded Durable Objects as the Link source of truth and KV as the Redirect read copy
 
 The service must run for ≤ $20/mo today without anything capping out below 100M DAU / 1B Links, keep Short codes guaranteed unique, and put a CDN and firewall in front of Redirects. We build it edge-native on Cloudflare: a single global TypeScript Worker, sharded Durable Objects (SQLite) as the only strongly consistent write path, and Workers KV as the eventually consistent copy that Redirects read. It is the only single-provider stack that fits the budget with CDN, WAF and DDoS protection included, and its peak cost (≈$11–25k/mo at list) is the lowest of the single-provider options because the zone CDN and WAF carry no per-request fee.
