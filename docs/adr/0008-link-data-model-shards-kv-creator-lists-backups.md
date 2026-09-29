@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-# Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and export the shards to a locked R2 bucket
+# Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) put every Link in one of 256 SQLite Durable Object shards, projected into Workers KV for Redirects and into one Durable Object per Creator for listing. This ADR fixes the shapes those three copies take and how they're kept recoverable.
 
@@ -10,7 +10,7 @@ Two facts drive most of it:
 - **Some of it can never change.** The shard hash and the KV key format are permanent: changing either means moving every Link.
 - **Deletion can't be undone.** Cloudflare has no trash or restore for a deleted Durable Object namespace or KV namespace ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). Durable Object point-in-time recovery (30 days, whole object) only works while the namespace still exists, and there is no Durable Object export tool.
 
-So each copy can rebuild the others, and one more copy lives outside both namespaces. The rule that no Short code is ever reissued ([ADR 0002](./0002-random-short-codes-claimed-by-conditional-insert.md)) has to survive every restore.
+So each copy can rebuild the others, and a change log of every shard lives outside both namespaces. The rule that no Short code is ever reissued ([ADR 0002](./0002-random-short-codes-claimed-by-conditional-insert.md)) has to survive every restore.
 
 Decided in [What is the Link data model across shards, KV, and Creator lists?](https://github.com/andrewferk/url-shortener/issues/14).
 
@@ -55,7 +55,7 @@ The outbox is state-based, not event-based. It commits in the same transaction a
 ```sql
 CREATE TABLE outbox (
   short_code      TEXT NOT NULL,
-  destination     TEXT NOT NULL,   -- 'kv' | 'creator'
+  destination     TEXT NOT NULL,   -- 'kv' | 'creator' | 'log'
   attempts        INTEGER NOT NULL DEFAULT 0,
   next_attempt_at INTEGER NOT NULL,
   PRIMARY KEY (short_code, destination)
@@ -65,7 +65,7 @@ CREATE TABLE outbox (
 - **One pending item per `(short_code, destination)`.** The payload is read from the *current* `links` row when the item is sent, and a delete just makes the same item pending again.
   - So every delivery is idempotent.
   - No stale "live" write can land after a tombstone.
-  - The destinations fail independently: a KV outage doesn't hold up the Creator lists.
+  - The destinations fail independently: a KV outage doesn't hold up the Creator lists or the change log.
 - **Delivery:**
   - Every enqueue sets the alarm to "now".
   - The alarm handler drains items in batches and deletes each one once it's delivered.
@@ -92,7 +92,7 @@ CREATE TABLE outbox (
 - **`LINKS` values** are versioned JSON, read with `type: "json"`:
   - live: `{"v":1,"t":"<Target URL>","e":<Expiry ms>,"c":"<Creator ID>","ts":<created_at ms>}`. The `e` is left out when there's no Expiry.
   - deleted: `{"v":1,"d":1,"c":"<Creator ID>","ts":<created_at ms>}`. A tombstone drops the Target URL and the Expiry, so a takedown removes the URL from the public read copy.
-  - `c` and `ts` aren't needed to Redirect. They make KV a complete second copy of every Link except deletion details, so the shards can be rebuilt from it.
+  - `c` and `ts` aren't needed to Redirect. They make KV a complete second copy of every Link except deletion details, so the shards can be rebuilt from it. With the change log in place, they cover only what the log can't: its last minute, and losing the backup bucket together with `links-data`. They cost $0 today and could be dropped later for free. Adding them back later would mean rewriting every value.
   - Nothing goes in KV metadata.
   - The shard answers the Worker's KV-miss fallback with the same value shape.
 
@@ -144,59 +144,67 @@ CREATE TABLE links (
 
 | Copy | Protected by |
 |---|---|
-| Shards | Point-in-time recovery (30 days); rebuilding from `LINKS`; nightly exports to R2 |
+| Shards | Point-in-time recovery (30 days); the change log in R2; rebuilding from `LINKS` |
 | `LINKS` | Re-driving every shard row through the outbox |
 | Creator lists | Re-driving the `creator` destination from the shards |
 | `AUTH` | Operator CLI exports to R2 |
 | `FLAGS` | Nothing. The flags are dated and short-lived. |
 
-- **Shard exports:** a Cron Trigger on `links-data` runs nightly and calls each shard.
-  - Each shard writes an incremental export: rows whose `created_at` or `deleted_at` is on or after its last export's start, minus 1 h of overlap. Its `meta` table records that start time. No column or index is added: the export is a full scan of the shard.
-  - On the 1st of each month it writes a full export instead.
-  - Objects are gzipped NDJSON at `shards/<nn>/full/<yyyy-mm>.ndjson.gz` and `shards/<nn>/incr/<yyyy-mm-dd>.ndjson.gz`.
-  - A large export continues across the shard's alarm. An object has only one alarm, so the handler serves both the outbox and the export, and schedules whichever is due first.
+- **The change log is the outbox's third destination, `log`.** Every change to a shard's `links` table also lands in R2, with the same retry-forever delivery as `kv` and `creator`.
+  - **Entries** are full current rows, as gzipped NDJSON sorted by Short code. A retried write can duplicate entries, which is harmless.
+  - **Batched per shard, at most once a minute.** A `log` item becomes due no sooner than 60 s after the shard's last log write. The drain then writes every due `log` item as one object, `log/minute/<nn>/<yyyy-mm-dd>/<timestamp>-<random>.ndjson.gz`. R2 objects can't be appended to, and one object per change would cost about $90–1,350/mo at peak in write operations.
+  - **Replay needs no ordering.** A Link's fields never change, and the only change a row can make is live → deleted. So merging entries for the same Short code is "the deleted one wins": replay works in any order and in parallel.
+  - **Replay can stop at a point in time.** The rows carry `created_at` and `deleted_at`, so replaying "as of T" ignores creates and deletes at or after T. That gives point-in-time recovery for as long as the log is kept, not just 30 days.
+- **Compaction** is a Cron Trigger on `links-data`, run as a streaming merge per shard. That works because every object is sorted by Short code.
+  - **Daily:** it merges yesterday's minute objects into `log/daily/<nn>/<yyyy-mm-dd>.ndjson.gz`.
+  - **Monthly:** it merges the previous snapshot with that month's dailies into `log/snapshot/<nn>/<yyyy-mm>.ndjson.gz`. It never scans a shard.
+  - **Recovery reads the latest snapshot, then the dailies since, then the minute objects since.**
 - **The bucket** is an R2 bucket in the prod account, owned by `infra/env` with `prevent_destroy`, and bound only to `links-data`.
-  - A bucket lock (`cloudflare_r2_bucket_lock`) keeps every object for 90 days, and a lifecycle rule expires objects at 100 days. The bucket therefore always holds at least two monthly fulls and every incremental since the older one.
-  - The lock guards against accidents, not against an admin: anyone with R2 write can remove the rule first. The rule lives in OpenTofu, so removing it shows up in a PR.
+  - **Bucket locks per prefix** (`cloudflare_r2_bucket_lock`): minute objects are locked for 2 days; dailies, snapshots and `auth/` for 90 days.
+  - **No lifecycle rule expires anything.** Compaction retires an object only once a newer object covering it has been written and its lock has passed. So a stuck compaction grows the bucket instead of losing data. It keeps the last three snapshots and every daily since the oldest of them, which is about three months of point-in-time replay.
+  - **The lock guards against accidents, not against an admin:** anyone with R2 write can remove the rule first. The rules live in OpenTofu, so removing one shows up in a PR.
 - **`AUTH` backups:** the Operator CLI gains `backup` and `restore`.
-  - `backup` exports `AUTH` to `auth/<timestamp>.json.gz` in the same bucket. It holds only hashes, so it's safe to store.
+  - `backup` exports `AUTH` to `auth/<timestamp>.json.gz` in the same bucket. It holds only hashes, so it's safe to store, and it's never retired.
   - The CLI runs `backup` after every write it makes to `AUTH`.
 
 ### Restores
 
-**Every restore ends with a reconcile, because a restore must never forget a claimed Short code.** Restoring a shard to an earlier point, or from last night's export, loses the codes claimed since then. `LINKS` still holds them, so the shard could reissue one. The reconcile:
+**Every restore ends with a reconcile, because a restore must never forget a claimed Short code.** A shard restored to an earlier point, or rebuilt from the log, can lack codes claimed since. `LINKS` still holds them, so the shard could reissue one. The reconcile:
 1. lists the shard's `LINKS` prefix;
-2. re-inserts every Short code the shard lacks, as a full row;
-3. re-drives both outbox destinations for the shard.
+2. re-inserts every Short code the shard lacks, as a full row (this also enqueues it to `log`);
+3. re-drives the `kv` and `creator` destinations for the shard.
+
+**Rolling back past an incident doesn't drop what came after it.** Log entries after the stopping point are reviewed and re-applied, at the least as claims, so a rollback fixes the bad rows without forgetting any Short code.
 
 | Loss | Restore |
 |---|---|
-| Bad code corrupted a shard (within 30 days) | Point-in-time recovery to a bookmark before the incident, then reconcile |
+| Bad code corrupted a shard (within 30 days) | Point-in-time recovery to a bookmark before the incident, then replay the log from that point, then reconcile |
+| Corruption older than 30 days | Rebuild the affected shards by replaying the log as of just before the incident, then re-apply later entries after review, then reconcile |
+| `links-data`'s namespace deleted (shards and Creator lists) | Redeploy. Replay each shard's latest snapshot, dailies and minute objects. Reconcile each shard from `LINKS`, which covers the last minute not yet logged, then re-drive `creator`. |
 | `LINKS` namespace deleted | Recreate it, then re-drive the `kv` destination for every row in every shard |
-| `links-data`'s namespace deleted (shards and Creator lists) | Redeploy. Rebuild each shard from its latest full export plus later incrementals, applied in order as upserts where a deletion always wins. Then reconcile each shard from `LINKS` to close the gap since the last export, and re-drive `creator`. |
+| Backup bucket lost | Recreate it and re-seed: each shard writes a one-off full snapshot by scanning itself. The log carries on from there. |
 | `AUTH` lost | `restore` from the latest `auth/` export |
-| Corruption older than 30 days | Rebuild the affected shards from R2 exports taken before it, then reconcile |
 
 How the Operator starts any of these belongs to [How does the Operator reach Link data (takedowns, Creator removal, restores)?](https://github.com/andrewferk/url-shortener/issues/24).
 
 ## Cost
 
 **Today:** $0 extra.
-- The exports and the `AUTH` backup fit R2's free tier (10 GB-month, 1M Class A operations).
+- The change log and the `AUTH` backups fit R2's free tier (10 GB-month, 1M Class A operations). A shard writes a log object only when it has changes.
 - Row reads and writes fit Workers Paid's included amounts.
 
 **Peak** (1B Links):
 - **`c`, `ts` and the key prefix** add about 55 bytes per `LINKS` value: about 55 GB, or ≈$25/mo of KV storage.
 - **Creator lists** duplicate about 500 GB of Link data: ≈$100/mo of Durable Object storage.
-- **A new Link writes about 8 SQLite rows:**
+- **A new Link writes about 10 SQLite rows:**
   - the shard row;
-  - two outbox items, each inserted and then deleted;
+  - three outbox items, each inserted and then deleted;
   - an alarm;
   - the Creator list row.
 
-  That's about $8 per 1M new Links once the included 50M rows written are used up.
-- **Nightly full scans for the exports** read about 31B rows a month: ≈$6 above the included 25B.
-- **R2:** about three fulls plus incrementals, roughly 0.5 TB: ≈$7.5/mo.
+  That's about $10 per 1M new Links once the included 50M rows written are used up.
+- **R2 writes:** minute objects are at most 256 shards × 43,200 minutes, about 11M a month: ≈$45/mo above the free 1M. Compaction's reads and writes are under $1.
+- **R2 storage:** three snapshots plus about three months of dailies, roughly 0.5 TB: ≈$7.5/mo.
 - **One-off costs:** re-driving `LINKS` after it's lost costs ≈$5k of KV writes. Listing all of `LINKS` costs ≈$5.
 
 This stays inside ADR 0001's ≈$11–25k/mo peak range.
@@ -208,18 +216,21 @@ This stays inside ADR 0001's ≈$11–25k/mo peak range.
 - **An event outbox** (created, deleted) with payload snapshots. It needs ordered delivery to stop a stale create landing after a delete. Sending current state per item needs no ordering.
 - **One KV namespace with key prefixes.** The same cost, but every binding that writes Link values could also delete credentials.
 - **Bare Short codes as `LINKS` keys.** Then one shard's reconcile means listing all 1B keys, which is about 1M list calls and can't be spread per shard.
-- **A lean KV value** (Target URL, Expiry and state only). It saves ≈$25/mo at peak, but then KV can't rebuild the shards, and a lost `links-data` namespace becomes unrecoverable beyond the last export.
+- **A lean KV value** (Target URL, Expiry and state only). It saves ≈$25/mo at peak. With the change log, KV's full copy only covers the log's last minute and a lost bucket. It's kept because dropping it later is free, while adding it back would mean rewriting every value (≈$5k at 1B Links).
 - **A Creator list of Short codes only,** fetching details from the shards on each listing. A 50-Link page would cost up to 50 Durable Object requests.
 - **A Creator list keyed by Short code with a `(created_at, short_code)` index.** It pages just as efficiently, but it writes twice the rows per arrival and needs a lookup per listed row.
-- **Point-in-time recovery plus rebuilding each copy from the other, with no R2 exports.** It costs nothing, but it can't survive losing `links-data` and `LINKS` together, or corruption older than 30 days.
-- **R2 exports without making KV a full copy.** The exports lag by up to a day, so without KV a lost shard can't be reconciled back to its last claim.
+- **Point-in-time recovery plus rebuilding each copy from the other, with nothing in R2.** It costs nothing, but it can't survive losing `links-data` and `LINKS` together, or corruption older than 30 days.
+- **Nightly exports from a scan of each shard** (incremental, plus a monthly full). Up to a day of changes is at risk, and the full scans cost ≈$6/mo at peak. The change log cuts the risk to about a minute, with no scans.
+- **One R2 object per change.** R2 can't append, so this means ≈$90–1,350/mo of writes at peak and billions of tiny objects to replay.
+- **A change log with no compaction.** At peak, per-minute objects reach about 134M a year, and every recovery would have to list them all.
 - **Backups in a separate Cloudflare account, or outside Cloudflare** (S3 or B2 with a compliance-mode object lock). Only these survive losing the prod account, but they add an account or a provider, a stored credential and S3 client code. Deferred (see Consequences).
 
 ## Consequences
 
 - **The shard hash, the object names and the `LINKS` key format are permanent.**
 - **Losing the whole prod account, or a compromised Operator token, can lose everything,** because the bucket lock can be removed by anyone with R2 write. This is an accepted risk for now. It is revisited at ADR 0007's trigger, the first real Creator, when the preview account split happens anyway.
-- **If `links-data` and `LINKS` are lost together,** Links created since the last nightly export are gone, and nothing records their Short codes. So those codes could be reissued: the one case where ADR 0002's guarantee doesn't hold.
+- **If `links-data` and `LINKS` are lost together,** only changes not yet in the log are gone: about the last minute. Nothing records those Short codes, so they could be reissued. That's the one case where ADR 0002's guarantee doesn't hold.
+- **Compaction must be monitored.** It never loses data, because objects are retired only once covered. But while it's stuck, minute objects pile up and recovery gets slower.
 - **A shard rebuilt from `LINKS` loses deletion details.** A tombstone in KV says a Link was deleted, but not when or by whom.
 - **The Link API ticket inherits:**
   - the Target URL size budget;
