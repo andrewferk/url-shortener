@@ -30,7 +30,7 @@ _Avoid_: TTL, expiration time
 A Link past its Expiry. It answers 410 Gone and its Short code is never reissued.
 
 **Deleted link**:
-A Link its Creator has deleted. The deletion is permanent: it answers 410 Gone and its Short code is never reissued.
+A Link its Creator has deleted, or the Operator has taken down. The deletion is permanent: it answers 410 Gone and its Short code is never reissued.
 _Avoid_: Disabled link, removed link, inactive link
 
 ### People
