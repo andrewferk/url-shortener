@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): `cred:` and `creator:` records live in their own `AUTH` KV namespace, which `links-data` never binds. The Operator CLI gains `backup` and `restore`, and exports `AUTH` to the backup bucket after every write.
+
 # Creators authenticate with Operator-issued API keys checked through KV, and CI with GitHub OIDC
 
 Creators are a small set that the Operator admits: there is no sign-up, and for now they use only the API on `api.`. The mechanism still must not cap out as that set grows, and it must not stop a later sign-up or UI from mapping onto the same Creators. Cloudflare Access is the obvious choice on Cloudflare, but it allows 50 free seats and 50 service tokens per account, and logins beyond the seat limit are blocked unless you pay per seat. Its `sub` changes if a user is removed and re-added, so we would keep our own identity mapping anyway. So we issue our own API keys, look them up in KV like any Redirect, and have CI prove itself with a GitHub Actions OIDC token instead of a stored secret.

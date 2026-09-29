@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): Link values live in the `LINKS` KV namespace under `<shard hex>:<Short code>` keys. Every value, tombstones included, also carries the Creator ID and `created_at`, so KV can rebuild the shards.
+
 # Cache Redirects only inside the Worker: a 30 s per-colo cache in front of a 60 s KV cache, `no-store` to browsers, and no purge
 
 Every Redirect runs the Worker ([ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md)), and the zone cache sits behind the Worker, so it never sees a Redirect. That leaves two caches that matter: KV's own edge cache, and whatever the Visitor's browser keeps. Workers KV bills every read, per key, whether or not its edge cache served it. So KV's `cacheTtl` buys latency, not money. [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) priced peak KV reads at a 90% edge hit ratio as if cached reads were free. Only a cache the Worker owns makes that figure true, and the Cache API is free. We put a short per-colo cache in front of KV and keep browsers out of it entirely. Nothing is purged: deletion is bounded by the TTLs alone.
