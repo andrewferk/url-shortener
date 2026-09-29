@@ -36,8 +36,12 @@ _Avoid_: Disabled link, removed link, inactive link
 ### People
 
 **Creator**:
-An authenticated caller permitted to create Links.
+An authenticated caller, a person or an automation, whom the Operator has admitted to create Links. A Creator's identity outlives any credential it authenticates with, and it may delete only the Links it created.
 _Avoid_: User, owner, account
+
+**Operator**:
+The person who runs the service: admits and removes Creators and can take down any Link. Not a kind of Creator; the Operator acts through the service's infrastructure, never through the Link API.
+_Avoid_: Admin, superuser
 
 **Visitor**:
 Anyone, unauthenticated, who follows a short URL.
