@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md): force shedding is a Worker variable ORed with the cost brake's KV flag, not a KV flag written by OpenTofu.
+
 # Protect against abuse with one edge flood ceiling, Worker-side limits on the shard fallback and on Creators, and a daily cost brake
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us:
