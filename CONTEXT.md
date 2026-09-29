@@ -23,7 +23,7 @@ The URL a Link redirects to.
 _Avoid_: Long URL, original URL, destination URL
 
 **Expiry**:
-The optional moment after which a Link stops redirecting.
+The optional moment after which a Link stops redirecting. Set when the Link is created and never changed.
 _Avoid_: TTL, expiration time
 
 **Expired link**:
