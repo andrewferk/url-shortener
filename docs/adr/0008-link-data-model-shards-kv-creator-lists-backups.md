@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0009](./0009-idempotent-link-creation-by-key-derived-short-codes.md): the shard's `links` table gains a nullable `idempotency_key` column. It rides the change log but isn't copied to `LINKS` or the Creator list.
+>
+> Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): restores freeze the shard through `frozen:<nn>` in `FLAGS`, and a frozen shard's drain pauses. A rollback past an incident reviews and re-applies the later log entries *before* the reconcile, not after it. The bucket gains an `ops/` prefix for audit records, locked for 90 days and never retired.
 
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
@@ -187,7 +189,7 @@ CREATE TABLE links (
 | Backup bucket lost | Recreate it and re-seed: each shard writes a one-off full snapshot by scanning itself. The log carries on from there. |
 | `AUTH` lost | `restore` from the latest `auth/` export |
 
-How the Operator starts any of these belongs to [How does the Operator reach Link data (takedowns, Creator removal, restores)?](https://github.com/andrewferk/url-shortener/issues/24).
+How the Operator starts any of these, and the order of steps within them, is in [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md).
 
 ## Cost
 

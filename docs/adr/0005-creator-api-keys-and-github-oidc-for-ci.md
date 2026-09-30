@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): `cred:` and `creator:` records live in their own `AUTH` KV namespace, which `links-data` never binds. The Operator CLI gains `backup` and `restore`, and exports `AUTH` to the backup bucket after every write.
+>
+> Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): the Operator CLI uses a dedicated `operator` token and a bucket-scoped R2 key, not the Operator's broad token, and every command writes an audit record under `ops/`. `creators remove --delete-links` first marks the Creator removed, then sets a permanent `removed_with_links` flag on the Creator object, so Links that reach its list late are taken down on arrival, then walks the list.
 
 # Creators authenticate with Operator-issued API keys checked through KV, and CI with GitHub OIDC
 
