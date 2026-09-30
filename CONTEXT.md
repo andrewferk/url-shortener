@@ -49,6 +49,10 @@ _Avoid_: User, client
 
 ### Operations
 
+**Link API**:
+The authenticated HTTP interface on the API subdomain through which Creators create, read, list and delete their own Links.
+_Avoid_: Admin API, management API
+
 **Redirect**:
 Answering a Visitor's request for a short URL: a 302 to the Target URL for a live Link, 410 Gone for an Expired or Deleted link, and 404 when no Link has that Short code.
 _Avoid_: Lookup, resolve, forward

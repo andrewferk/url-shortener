@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0009](./0009-idempotent-link-creation-by-key-derived-short-codes.md): a create that carries an `Idempotency-Key` derives its generated Short code from SHA-256 of the Creator ID, the key and an attempt number, instead of drawing it from a CSPRNG. Uniqueness still rests only on the claim.
+
 # Generate Short codes at random and rely on the shard's conditional claim, not a counter and bijection
 
 The original sketch generated Short codes from an incrementing counter passed through a keyed bijection, with a hash of the Target URL as a fallback. We don't do that. A generated Short code is 7 base62 characters drawn from a CSPRNG and proposed to `LinkRegistry.claim`, the atomic insert-if-absent on the owning Durable Object shard ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)). If the claim fails, the caller draws again. Custom aliases need that same claim anyway to guard the shared namespace, so random generation adds no machinery. A counter would add a strongly consistent counter, a leasing protocol, and a permanent secret key, and would still have to pass through the claim.
