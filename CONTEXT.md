@@ -62,8 +62,16 @@ Answering a Visitor's request for a short URL: a 302 to the Target URL for a liv
 _Avoid_: Lookup, resolve, forward
 
 **Status page**:
-The public page reporting the service's uptime, Redirect latency percentiles, and request volume over time.
+The public page reporting the service's uptime, Redirect latency percentiles, and request volume over time, and how the service stands against its Objectives.
 _Avoid_: Dashboard, metrics page
+
+**Objective**:
+A target the Status page reports the service against, over a rolling 30 days: uptime, Redirect latency, or error rate. A published target, not a promise.
+_Avoid_: SLA, commitment
+
+**Error budget**:
+The share of an Objective's window that may fall short of its target before the Objective is breached.
+_Avoid_: Allowance
 
 **Redirect event**:
 The record of one Redirect: its Short code, outcome, and duration.
