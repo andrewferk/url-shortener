@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md): after each rollup, the Status Worker in prod also polls Audit Logs v2 and emails a digest of destructive changes. It sends an "audit watch blind" alert when every poll for an hour has failed. The blind alert uses this ADR's alert state in D1.
+
 # Report three rolling 30-day Objectives from additive rollup counts, and alert the Operator by email from both Grafana and the Status Worker
 
 [ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md) defined what the Status page measures but left open what it reports against. The service now has three **Objectives**, each over a rolling 30 days: uptime from Probe-minutes, and Redirect latency and error rate from Redirect events. The two request-based Objectives are ratios, not percentiles, so each has an **Error budget** that can be counted. The rollups store additive counts, and 30-day figures are summed from D1. Alerts go to the Operator by email, with no paging. Grafana sends the ones that must work while Cloudflare is down, and the Status Worker sends the ones that need Analytics Engine data.
