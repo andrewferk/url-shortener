@@ -5,6 +5,8 @@ status: accepted
 > Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): `infra/env` also owns an R2 backup bucket bound to `links-data`, with a bucket lock and `prevent_destroy` in prod only. So `production-admin` also needs R2 edit.
 >
 > Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): `infra/bootstrap` also creates the Operator CLI's `operator` token (Editor on `links-data`, Workers Scripts Read, KV Edit) and an R2 key scoped to the backup bucket. `links-data` also holds the Operator Workflows, and sets `workers_dev = false` and `preview_urls = false`, which the render script enforces.
+>
+> Amended by [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md): `infra/zone` also owns Email Routing and the Operator's verified destination address, so the `production` token gains Email Routing permissions. When `probes_enabled`, `infra/env` also owns the Grafana contact point, notification policy and check alerts, plus a Status page check that brings prod to about 93.7k of Grafana Free's 100k monthly executions. The Status Worker gains a `send_email` binding.
 
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 

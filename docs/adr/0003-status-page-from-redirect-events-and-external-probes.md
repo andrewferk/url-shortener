@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md): the SLO targets are decided (three rolling 30-day Objectives). Redirect events gain an `error` outcome, recorded by a catch-all handler. Every rollup bucket also stores additive counts for Error budgets. A second Synthetic Monitoring check alerts when the snapshot goes stale.
+
 # Feed the Status page from self-timed Redirect events and external Probes, served by a separate Status Worker
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us no edge latency percentiles, no per-request edge log, and no health checks. So the Worker measures each Redirect itself and writes a Redirect event to Workers Analytics Engine. Uptime comes from Probes run by an external service. A separate Status Worker rolls both sources up into D1 every 5 minutes and serves precomputed snapshots. Because the page depends on the Worker seeing every Redirect, **every Redirect runs the Worker**: Redirects are never served from Workers Cache. The saving would be small anyway, since cache hits are still billed as Workers requests.
