@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): operations address a Link by Short URL (or `--namespace` plus a Short code), and lists they print or read use Short URLs or `<Namespace ID>:<Short code>`.
+
 # Run Operator operations as Workflows in `links-data`, audit them in the backup bucket, and freeze shards during restores
 
 The shard and Creator Durable Objects live in `links-data`, which has no routes and deploys only through `production-admin` ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). There is no admin endpoint ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)). Yet the Operator must reach that data:

@@ -5,6 +5,8 @@ status: accepted
 > Amended by [ADR 0009](./0009-idempotent-link-creation-by-key-derived-short-codes.md): the shard's `links` table gains a nullable `idempotency_key` column. It rides the change log but isn't copied to `LINKS` or the Creator list.
 >
 > Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): restores freeze the shard through `frozen:<nn>` in `FLAGS`, and a frozen shard's drain pauses. A rollback past an incident reviews and re-applies the later log entries *before* the reconcile, not after it. The bucket gains an `ops/` prefix for audit records, locked for 90 days and never retired.
+>
+> Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): the shard number hashes `<Namespace ID>:<Short code>`; the shard's and the outbox's primary keys lead with `namespace`; `LINKS` keys are `<shard hex>:<Namespace ID>:<Short code>`; change-log entries carry `namespace` and sort by `(namespace, short_code)`. All of it is as permanent as the original.
 
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 

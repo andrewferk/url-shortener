@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0009](./0009-idempotent-link-creation-by-key-derived-short-codes.md): a create that carries an `Idempotency-Key` derives its generated Short code from SHA-256 of the Creator ID, the key and an attempt number, instead of drawing it from a CSPRNG. Uniqueness still rests only on the claim.
+>
+> Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): a Short code is unique, and never reissued, within its Namespace rather than the whole deployment. The reserved-alias list applies unchanged in every Namespace.
 
 # Generate Short codes at random and rely on the shard's conditional claim, not a counter and bijection
 
