@@ -11,11 +11,15 @@ The stored mapping from a Short code to a Target URL, optionally carrying an Exp
 _Avoid_: Short URL (as a name for the record), mapping, entry
 
 **Short code**:
-The case-sensitive key that identifies a Link in its short URL: 7 random base62 characters when generated. Unique across all Links, and never reused once issued.
+The case-sensitive key that identifies a Link in its short URL: 7 random base62 characters when generated. Unique within its Namespace, and never reused there once issued.
 _Avoid_: Slug, hash, key, token
 
+**Namespace**:
+The scope within which a Short code is unique. Every Link belongs to exactly one Namespace, and each Short domain serves exactly one. A deployment starts with a single default Namespace.
+_Avoid_: Tenant, workspace, domain
+
 **Short domain**:
-A domain that a deployment of the service answers Redirects on. It is given to the deployment, not chosen by the service.
+A domain that a deployment of the service answers Redirects on, for one Namespace. It is given to the deployment, not chosen by the service.
 _Avoid_: Vanity domain, host
 
 **Short URL**:
@@ -23,7 +27,7 @@ A Short domain followed by a Short code: the address a Visitor follows.
 _Avoid_: Short link, shortened URL
 
 **Custom alias**:
-A Short code chosen by the Creator rather than generated: 3–32 characters of letters, digits, `-` and `_`. Shares one namespace with generated Short codes.
+A Short code chosen by the Creator rather than generated: 3–32 characters of letters, digits, `-` and `_`. Shares its Namespace with generated Short codes.
 _Avoid_: Vanity URL, custom slug
 
 **Target URL**:
@@ -66,7 +70,7 @@ The authenticated HTTP interface on the API subdomain through which Creators cre
 _Avoid_: Admin API, management API
 
 **Redirect**:
-Answering a Visitor's request for a short URL: a 302 to the Target URL for a live Link, 410 Gone for an Expired or Deleted link, and 404 when no Link has that Short code.
+Answering a Visitor's request for a short URL: a 302 to the Target URL for a live Link, 410 Gone for an Expired or Deleted link, and 404 when no Link has that Short code in the Short domain's Namespace.
 _Avoid_: Lookup, resolve, forward
 
 **Status page**:

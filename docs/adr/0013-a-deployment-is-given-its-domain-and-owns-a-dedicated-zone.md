@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): each Short domain maps to exactly one Namespace, resolved from the request's hostname. A deployment today maps its `base_domain` to the `default` Namespace.
+
 # A deployment is given its domain and owns a dedicated zone
 
 The project is headed for open source. It should run as its own service, be embeddable in another service, and not rule out a SaaS built on it. So no decision names a domain. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) already takes the Short domain as an input (`base_domain`, `preview_base_domain`) and derives every hostname from it. This ADR states what a deployment requires of that domain, and what it does to the zone.
