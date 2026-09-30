@@ -14,6 +14,14 @@ _Avoid_: Short URL (as a name for the record), mapping, entry
 The case-sensitive key that identifies a Link in its short URL: 7 random base62 characters when generated. Unique across all Links, and never reused once issued.
 _Avoid_: Slug, hash, key, token
 
+**Short domain**:
+A domain that a deployment of the service answers Redirects on. It is given to the deployment, not chosen by the service.
+_Avoid_: Vanity domain, host
+
+**Short URL**:
+A Short domain followed by a Short code: the address a Visitor follows.
+_Avoid_: Short link, shortened URL
+
 **Custom alias**:
 A Short code chosen by the Creator rather than generated: 3–32 characters of letters, digits, `-` and `_`. Shares one namespace with generated Short codes.
 _Avoid_: Vanity URL, custom slug
