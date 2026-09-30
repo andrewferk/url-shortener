@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0009](./0009-idempotent-link-creation-by-key-derived-short-codes.md): the shard's `links` table gains a nullable `idempotency_key` column. It rides the change log but isn't copied to `LINKS` or the Creator list.
+
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) put every Link in one of 256 SQLite Durable Object shards, projected into Workers KV for Redirects and into one Durable Object per Creator for listing. This ADR fixes the shapes those three copies take and how they're kept recoverable.
