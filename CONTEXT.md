@@ -65,6 +65,10 @@ _Avoid_: User, client
 
 ### Operations
 
+**Deployment**:
+One running instance of the service, run by one Operator, with its own Cloudflare account, Short domains and Namespaces.
+_Avoid_: Instance, install
+
 **Link API**:
 The authenticated HTTP interface on the API subdomain through which Creators create, read, list and delete their own Links.
 _Avoid_: Admin API, management API
