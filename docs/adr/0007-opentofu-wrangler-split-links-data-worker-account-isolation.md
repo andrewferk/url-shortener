@@ -9,6 +9,8 @@ status: accepted
 > Amended by [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md): `infra/zone` also owns Email Routing and the Operator's verified destination address, so the `production` token gains Email Routing permissions. When `probes_enabled`, `infra/env` also owns the Grafana contact point, notification policy and check alerts, plus a Status page check that brings prod to about 93.7k of Grafana Free's 100k monthly executions. The Status Worker gains a `send_email` binding.
 >
 > Amended by [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md): `infra/bootstrap` also creates an `audit-read` token (Account Settings Read only), pushed only to prod's Status Worker. `infra/env` outputs the protected set of prod resource and token IDs for the render script. The consequence that Cloudflare sends no alert on deletion is answered: the Status Worker polls Audit Logs v2 and emails the Operator.
+>
+> Amended by [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md): the `production`, `production-admin` and `preview` GitHub environments, with their secrets and approvals, live in each deployment's ops repo, which is public for the reference deployment. The render script and `infra/` roots run from this repo at the ops repo's pinned ref. Previews of pull requests are dispatched from the ops repo for one approved head SHA, built without secrets and deployed by trusted tooling.
 
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 

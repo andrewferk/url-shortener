@@ -7,6 +7,8 @@ status: accepted
 > Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): the Operator CLI uses a dedicated `operator` token and a bucket-scoped R2 key, not the Operator's broad token, and every command writes an audit record under `ops/`. `creators remove --delete-links` first marks the Creator removed, then sets a permanent `removed_with_links` flag on the Creator object, so Links that reach its list late are taken down on arrival, then walks the list.
 >
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): every Creator is bound to one Namespace when it is admitted. `creator:<id>` records it, and `creators add` takes `--namespace`, defaulting to `default`.
+>
+> Amended by [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md): the OIDC trust rule's `repository_id`, `environment` claim and `main`-only rule belong to the deployment's ops repo, which calls this repo's reusable workflows. This repo holds no credentials.
 
 # Creators authenticate with Operator-issued API keys checked through KV, and CI with GitHub OIDC
 
