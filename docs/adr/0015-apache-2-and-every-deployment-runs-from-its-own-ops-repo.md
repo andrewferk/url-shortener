@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md): applying a pull request's `infra/env` runs arbitrary pull-request code with the `preview` token, because OpenTofu's `local-exec` and `terraform_data` are built in. The trusted deploy protects the workflow's logic, and the Operator's review remains the gate until the split. The render script is generic over `infra/env`'s outputs, so a preview that adds a binding needs no script change. Reusable workflows check out their own code at `job.workflow_sha`, so an ops repo pins only its `uses:` lines. Another account's caller passes repo-level secrets explicitly, and environment secrets resolve by name from the ops repo's own environments.
+
 # License under Apache-2.0, keep this repo free of credentials, and run every deployment from its own public ops repo
 
 The project is headed for open source, and this repo is already public, with no licence. It should be embeddable, and must not foreclose a SaaS built on it. [ADR 0013](./0013-a-deployment-is-given-its-domain-and-owns-a-dedicated-zone.md) makes every deployment value an input, and the author's instance a deployment like any other Operator's.

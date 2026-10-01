@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md): the `production-plan` token's ID joins `audit_protected_token_ids`. Bootstrap's checks that `audit-read` can read `/logs/audit`, and that bucket-lock changes are logged, run as the Operator CLI's `doctor`.
+
 # Watch Audit Logs v2 from the Status Worker for destructive changes, and email the Operator a digest
 
 Cloudflare sends no alert when a Worker, KV namespace, D1 database, R2 bucket or DNS record is deleted ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). The guards so far protect against *OpenTofu* deleting things:
