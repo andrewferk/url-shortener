@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): each Short domain maps to exactly one Namespace, resolved from the request's hostname. A deployment today maps its `base_domain` to the `default` Namespace.
+>
+> Amended by [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md): the ban on committed deployment values covers this repo. Each deployment's ops repo commits its own non-secret config.
 
 # A deployment is given its domain and owns a dedicated zone
 
