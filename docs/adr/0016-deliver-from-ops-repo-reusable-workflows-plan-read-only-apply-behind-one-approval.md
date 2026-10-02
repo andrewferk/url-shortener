@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): `deployment.json` gains `location_hints`; the `admin` job touches all 256 shards after deploying `links-data` and reports where each landed; the `plan` job fails when a hint differs from the one first applied.
+
 # Deliver through reusable workflows called from each ops repo: plan read-only, apply behind at most one approval, and drill restores in a throwaway environment
 
 [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md) puts every deployment in its own ops repo, which calls this repo's reusable workflows at a pinned ref and holds the `production`, `production-admin` and `preview` GitHub environments. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) fixes what each credential can do and that `production-admin` and `preview` need the Operator's approval. This ADR decides the pipeline between them.

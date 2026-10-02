@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md): the Durable Object classes live in a separately deployed `links-data` Worker, which the Redirect Worker binds to.
+>
+> Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): there is a region to choose after all. Every shard and Creator object is placed by a required `location_hints.durable_objects` input, and D1 and R2 take optional hints. No jurisdiction is set.
 
 # Build on Cloudflare Workers in TypeScript, with sharded Durable Objects as the Link source of truth and KV as the Redirect read copy
 
