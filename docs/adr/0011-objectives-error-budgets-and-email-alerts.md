@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md): after each rollup, the Status Worker in prod also polls Audit Logs v2 and emails a digest of destructive changes. It sends an "audit watch blind" alert when every poll for an hour has failed. The blind alert uses this ADR's alert state in D1.
+>
+> Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): `shard-fallback` and `not-found` stay eligible for the latency Objective, which now depends on where the Operator placed the shards.
 
 # Report three rolling 30-day Objectives from additive rollup counts, and alert the Operator by email from both Grafana and the Status Worker
 
