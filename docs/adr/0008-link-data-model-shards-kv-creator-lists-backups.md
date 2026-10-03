@@ -9,6 +9,8 @@ status: accepted
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): the shard number hashes `<Namespace ID>:<Short code>`; the shard's and the outbox's primary keys lead with `namespace`; `LINKS` keys are `<shard hex>:<Namespace ID>:<Short code>`; change-log entries carry `namespace` and sort by `(namespace, short_code)`. All of it is as permanent as the original.
 >
 > Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): every `get()` of a shard or a Creator object passes the deployment's `locationHint`, through one stub factory. Object names are unchanged.
+>
+> Amended by [ADR 0018](./0018-hash-the-case-folded-short-code-keep-aliases-case-sensitive-reserve-case-insensitive-mode.md): the shard hash takes the case-folded Short code (`<Namespace ID>:<fold(Short code)>`), so every case variant of a code lives on one shard. Rows, `LINKS` keys and the change log keep the exact code.
 
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
