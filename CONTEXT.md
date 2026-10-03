@@ -46,14 +46,22 @@ A Link its Creator has deleted, or the Operator has taken down. The deletion is 
 _Avoid_: Disabled link, removed link, inactive link
 
 **Takedown**:
-The Operator's deletion of a Link, made for a stated reason. The Link becomes a Deleted link that records the Operator, not its Creator, as the one who deleted it.
+The deletion of a Link by the Operator, or by the service on the Operator's behalf, made for a stated reason. The Link becomes a Deleted link that records the Operator, not its Creator, as the one who deleted it.
 _Avoid_: Ban, block, removal
+
+**Abuse report**:
+A claim, from anyone, that a Link's Target URL is harmful, sent to the Deployment's abuse address. The Operator answers it; a confirmed report ends in a Takedown.
+_Avoid_: Complaint, flag
 
 ### People
 
 **Creator**:
 An authenticated caller, a person or an automation, whom the Operator has admitted to create Links. A Creator's identity outlives any credential it authenticates with, and it may delete only the Links it created.
 _Avoid_: User, owner, account
+
+**Suspended Creator**:
+A Creator barred from the Link API until the Operator resumes it. Its Links keep redirecting, and it is still a Creator.
+_Avoid_: Banned, disabled, blocked
 
 **Operator**:
 The person who runs the service: admits and removes Creators and can take down any Link. Not a kind of Creator; the Operator acts through the service's infrastructure, never through the Link API.

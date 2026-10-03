@@ -7,6 +7,8 @@ status: accepted
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): a Short code is unique, and never reissued, within its Namespace rather than the whole deployment. The reserved-alias list applies unchanged in every Namespace.
 >
 > Amended by [ADR 0018](./0018-hash-the-case-folded-short-code-keep-aliases-case-sensitive-reserve-case-insensitive-mode.md): Custom aliases and generated Short codes stay case-sensitive, but the shard number now hashes the case-folded Short code, and a future opt-in case-insensitive mode is reserved: it would lowercase such aliases at creation and refuse any new Short code whose folded form already exists.
+>
+> Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): the plain-text bodies of the apex's 404 and 410 answers name the deployment's abuse address and the URL of its abuse policy. The apex gains no route.
 
 # Generate Short codes at random and rely on the shard's conditional claim, not a counter and bijection
 

@@ -9,6 +9,8 @@ status: accepted
 > Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the brake's daily count is `sum(sample_interval * _sample_interval)` over the `shard-fallback` and `not-found` index values, so it stays correct once Analytics Engine samples.
 >
 > Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): the shard-fallback limit bounds shard cost, not guessing, which runs at the edge ceiling's rate and is accepted. IPv6 misses also pass a /48 limiter (120 per 60 s). The brake's window is one UTC hour (125,000 lookups, flag `brake:<utc-hour>`, cached in isolate memory). The Status Worker sends a "Redirect flood" alert, and the spend alert is a manual step, not an OpenTofu resource.
+>
+> Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): a per-Creator daily ceiling (`creator_daily_link_ceiling`, default 600) sits above the daily cap. Past it, the Creator's object takes down every further Link of that UTC day as it arrives and suspends the Creator. The Status Worker sends a "Creator at daily cap" email.
 
 # Protect against abuse with one edge flood ceiling, Worker-side limits on the shard fallback and on Creators, and a daily cost brake
 

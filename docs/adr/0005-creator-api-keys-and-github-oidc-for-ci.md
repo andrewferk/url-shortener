@@ -9,6 +9,8 @@ status: accepted
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): every Creator is bound to one Namespace when it is admitted. `creator:<id>` records it, and `creators add` takes `--namespace`, defaulting to `default`.
 >
 > Amended by [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md): the OIDC trust rule's `repository_id`, `environment` claim and `main`-only rule belong to the deployment's ops repo, which calls this repo's reusable workflows. This repo holds no credentials.
+>
+> Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): a Creator can be suspended, by the Operator or by the daily ceiling. A Suspended Creator gets the uniform 401 on every Link API call while its Links keep redirecting. The Link API reads `suspended:<creatorId>` in `FLAGS` after verifying the credential. The CLI gains `creators suspend` and `creators resume`.
 
 # Creators authenticate with Operator-issued API keys checked through KV, and CI with GitHub OIDC
 
