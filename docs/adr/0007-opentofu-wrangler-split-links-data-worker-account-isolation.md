@@ -17,6 +17,8 @@ status: accepted
 > Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): the D1 database and every R2 bucket, the state buckets included, are created with the deployment's optional `location_hints.d1` and `location_hints.r2`. A hint can't change once applied.
 >
 > Amended by [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md): `infra/bootstrap` holds one OpenTofu configuration, applied by hand, that installs Grafana Synthetic Monitoring; its state has its own key and a passphrase only the Operator holds, and is the one state that deliberately holds a secret. `infra/env` owns a Grafana rule group in place of the per-check alerts, and takes `probe_frequency_seconds`, `probe_locations` and `status_check_locations`.
+>
+> Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): "nothing that runs unattended in prod can delete anything" is replaced by a recoverability claim and a table of what each credential can do to Link data. Prod's backup bucket and its locks move to a hand-applied configuration in `infra/bootstrap`, so `production-admin` loses R2 edit and `production-plan` gains R2 read. Each `links-data` deploy pushes a fresh `OPERATOR_GATE` secret. Every token expires after 13 months, is rotated yearly and uses the narrowest Workers role.
 
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 

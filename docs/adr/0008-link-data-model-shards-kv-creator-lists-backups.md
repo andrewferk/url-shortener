@@ -15,6 +15,8 @@ status: accepted
 > Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): a Deleted link no longer keeps its Target URL. The delete sets `target_url` to the empty string and fills a new nullable `target_url_sha256` column; the Creator list row gets the empty string; the scrubbed row rides the change log, and "the deleted one wins" carries the erasure through compaction in about three months. The merge rule itself is unchanged and now deliberate: Links are immutable, with no `version` column.
 >
 > Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): `FLAGS` also holds an undated `suspended:<creatorId>` key, written by `links-data` from the Creator object's `meta` and rewritten by a reconcile. The Status Worker binds `FLAGS` to list `cap:` and `suspended:` keys.
+>
+> Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): `links-data` binds and writes `AUTH`, and writes every `auth/` export. Prod's backup bucket, bucket locks and lifecycle rules are applied by hand from `infra/bootstrap`, not by `production-admin`. Separate KV namespaces guard against a bug, not against a credential that can deploy a Worker.
 
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
