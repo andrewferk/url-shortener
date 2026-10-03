@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0018](./0018-hash-the-case-folded-short-code-keep-aliases-case-sensitive-reserve-case-insensitive-mode.md): the shard number hashes `<Namespace ID>:<fold(Short code)>`, lowercasing the Short code first. Every other use of the Short code in this encoding keeps the exact form.
+
 # Identify every Link by an opaque Namespace plus its Short code, so one deployment can serve many Short domains
 
 [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) makes the shard hash and the `LINKS` key format permanent. As decided there, they held only the Short code, so a deployment had one Short code space forever. The project is headed for open source, embedding, and possibly a SaaS in which customers bring their own Short domains. With one space, one customer's `acme.co/sale` would block every other customer's `/sale`, and adding scoping later would mean moving every Link.
