@@ -7,7 +7,7 @@ A service that maps short, memorable URLs to long ones and redirects visitors to
 ### Links
 
 **Link**:
-The stored mapping from a Short code to a Target URL, optionally carrying an Expiry.
+The stored mapping from a Short code to a Target URL, optionally carrying an Expiry. Its fields never change after creation; the only change a Link ever makes is to become a Deleted link.
 _Avoid_: Short URL (as a name for the record), mapping, entry
 
 **Short code**:
@@ -31,7 +31,7 @@ A Short code chosen by the Creator rather than generated: 3–32 characters of l
 _Avoid_: Vanity URL, custom slug
 
 **Target URL**:
-The URL a Link redirects to.
+The URL a Link redirects to. Set when the Link is created and never changed, and erased when the Link is deleted.
 _Avoid_: Long URL, original URL, destination URL
 
 **Expiry**:
@@ -42,7 +42,7 @@ _Avoid_: TTL, expiration time
 A Link past its Expiry. It answers 410 Gone and its Short code is never reissued.
 
 **Deleted link**:
-A Link its Creator has deleted, or the Operator has taken down. The deletion is permanent: it answers 410 Gone and its Short code is never reissued.
+A Link its Creator has deleted, or the Operator has taken down. The deletion is permanent: it answers 410 Gone, its Target URL is erased, and its Short code is never reissued.
 _Avoid_: Disabled link, removed link, inactive link
 
 **Takedown**:

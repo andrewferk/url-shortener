@@ -11,6 +11,8 @@ status: accepted
 > Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): every `get()` of a shard or a Creator object passes the deployment's `locationHint`, through one stub factory. Object names are unchanged.
 >
 > Amended by [ADR 0018](./0018-hash-the-case-folded-short-code-keep-aliases-case-sensitive-reserve-case-insensitive-mode.md): the shard hash takes the case-folded Short code (`<Namespace ID>:<fold(Short code)>`), so every case variant of a code lives on one shard. Rows, `LINKS` keys and the change log keep the exact code.
+>
+> Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): a Deleted link no longer keeps its Target URL. The delete sets `target_url` to the empty string and fills a new nullable `target_url_sha256` column; the Creator list row gets the empty string; the scrubbed row rides the change log, and "the deleted one wins" carries the erasure through compaction in about three months. The merge rule itself is unchanged and now deliberate: Links are immutable, with no `version` column.
 
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 

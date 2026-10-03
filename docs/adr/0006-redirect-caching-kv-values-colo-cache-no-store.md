@@ -5,6 +5,8 @@ status: accepted
 > Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): Link values live in the `LINKS` KV namespace under `<shard hex>:<Short code>` keys. Every value, tombstones included, also carries the Creator ID and `created_at`, so KV can rebuild the shards.
 >
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): `LINKS` keys, and so the per-colo cache key, are `<shard hex>:<Namespace ID>:<Short code>`.
+>
+> Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): a Link's Target URL and Expiry are immutable as a chosen property of the service, not because the caches lack invalidation. The 90 s delete bound is unchanged.
 
 # Cache Redirects only inside the Worker: a 30 s per-colo cache in front of a 60 s KV cache, `no-store` to browsers, and no purge
 

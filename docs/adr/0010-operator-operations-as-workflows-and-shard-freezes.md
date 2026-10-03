@@ -5,6 +5,8 @@ status: accepted
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): operations address a Link by Short URL (or `--namespace` plus a Short code), and lists they print or read use Short URLs or `<Namespace ID>:<Short code>`.
 >
 > Amended by [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md): restore drills run these Workflows from GitHub Actions, in a throwaway `drill` environment with preview credentials only. Prod operations still never run from GitHub Actions. Bootstrap's check of the `operator` token's scope runs as the Operator CLI's `doctor`.
+>
+> Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): the audit record of a takedown or a `creators remove --delete-links` lists every Link it deleted with its Target URL, because the shard erases the URL on deletion and the record is the Operator's evidence.
 
 # Run Operator operations as Workflows in `links-data`, audit them in the backup bucket, and freeze shards during restores
 

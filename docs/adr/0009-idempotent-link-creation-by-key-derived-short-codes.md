@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): a keyed create that finds its own earlier attempt already deleted compares the request's Target URL against the row's `target_url_sha256`, since the row no longer holds the URL.
+
 # Make Link creation idempotent by deriving the Short code from the client's Idempotency-Key
 
 A retried `POST /v1/links` would draw a new random Short code ([ADR 0002](./0002-random-short-codes-claimed-by-conditional-insert.md)). The new code usually lands on a different shard, so a lost response turns into a second, orphaned Link. An idempotency record can't live in the shard that claims the Link, because the retry doesn't know which shard that is ([ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md)). The Creator's Durable Object is kept off the create path ([ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)). So we don't store the key anywhere separate. When a request carries an `Idempotency-Key`, the Short code is **derived from the key** instead of drawn at random. A retry then recomputes the same code, reaches the same shard, and finds its own row. The existing atomic claim is the only coordination.
