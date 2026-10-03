@@ -7,6 +7,8 @@ status: accepted
 > Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): `shard-fallback` and `not-found` stay eligible for the latency Objective, which now depends on where the Operator placed the shards.
 >
 > Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the additive counts are `sum(sample_interval * _sample_interval)`; Probe-minutes the rollup can no longer observe (healed buckets past Grafana's 14 days) leave the uptime denominator and are shown as unobserved.
+>
+> Amended by [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md): the Grafana alerts are rules we own on `probe_success`: "Redirects down" (no location succeeded over three Probe frequencies, at least two reporting), "Status page stale" (neither of two locations succeeded for 20 minutes) and a new "Probes blind". The per-check `ProbeFailedExecutionsTooHigh` alert is dropped. A fire drill proves the rule before launch. Executions are about 75.9k of 100k.
 
 # Report three rolling 30-day Objectives from additive rollup counts, and alert the Operator by email from both Grafana and the Status Worker
 

@@ -7,6 +7,8 @@ status: accepted
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): a Redirect event's index is `<Namespace ID>:<Short code>`, and it gains a `namespace` blob. The Status page stays deployment-wide.
 >
 > Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the index is `<Namespace ID>:<source>:<outcome>` and the Short code becomes a blob; `sample_interval = N` (an integer) replaces `weight`; every count is `sum(sample_interval * _sample_interval)` and percentiles weight by `_sample_interval`; each bucket stores `rows_read` and `max_sample_interval`, judges "insufficient data" on rows and shows "estimated" when sampled; the rollup heals missing buckets itself, bounded per run.
+>
+> Amended by [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md): Probes run from three Probe locations every 2 minutes. Each run stands for the Probe-minutes of its interval. A window is down when at least two locations reported and all failed; a lone failing report is unobserved. Executions are about 76k a month with the Status page check.
 
 # Feed the Status page from self-timed Redirect events and external Probes, served by a separate Status Worker
 

@@ -97,6 +97,14 @@ _Avoid_: Hit, click (reserved for future click analytics)
 A synthetic Redirect request made from outside the service to measure uptime.
 _Avoid_: Health check, ping
 
+**Probe location**:
+A place outside the service from which Probes are made. Uptime is judged across all Probe locations together, never by one alone.
+_Avoid_: Region, vantage point
+
+**Probe-minute**:
+One minute of the uptime Objective's window, judged up, down, or unobserved by the Probes that cover it.
+_Avoid_: Probe run, check, tick
+
 **Canary link**:
 The Link that Probes follow. Its Redirects count toward Redirect latency but not request volume.
 _Avoid_: Test link, health link

@@ -15,6 +15,8 @@ status: accepted
 > Amended by [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md): a fourth GitHub environment, `production-plan` (no approval, `main` only), holds a read-only token created in `infra/bootstrap`. It plans `infra/zone` and `env/prod` unattended, so `production-admin` runs only when something is pending. `infra/env`'s Worker outputs become one structured `workers` output for the render script. The script's guards also accept a throwaway `drill` environment for restore drills. After the account split, `deploy.yml` applies the preview account's zone before prod's.
 >
 > Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): the D1 database and every R2 bucket, the state buckets included, are created with the deployment's optional `location_hints.d1` and `location_hints.r2`. A hint can't change once applied.
+>
+> Amended by [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md): `infra/bootstrap` holds one OpenTofu configuration, applied by hand, that installs Grafana Synthetic Monitoring; its state has its own key and a passphrase only the Operator holds, and is the one state that deliberately holds a secret. `infra/env` owns a Grafana rule group in place of the per-check alerts, and takes `probe_frequency_seconds`, `probe_locations` and `status_check_locations`.
 
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 
