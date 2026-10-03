@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): `links-data` now binds `AUTH`, for the Operator's Creator and key commands. Suspension stays in the Creator object and `FLAGS`.
+
 # Take Abuse reports at `abuse@`, alert at the daily cap, and take down and suspend past a daily ceiling
 
 Abuse that gets the Short domain blocklisted or the Cloudflare account suspended is the cheapest way to destroy a deployment. Until now there was a takedown runbook and nothing else: no address to report to, no page saying what happens to a report, and no signal when a Creator hit [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s daily cap. That cap is soft. The burst limit counts per location, so a stolen key used from about 300 locations creates about 18,000 Links a minute, and the cap flag takes two to three minutes to land: 36,000 to 54,000 Links, all redirecting until the Operator notices. The only response was removing the Creator, who in that case is the victim.

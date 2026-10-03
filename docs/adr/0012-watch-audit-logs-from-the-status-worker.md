@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md): the `production-plan` token's ID joins `audit_protected_token_ids`. Bootstrap's checks that `audit-read` can read `/logs/audit`, and that bucket-lock changes are logged, run as the Operator CLI's `doctor`.
+>
+> Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): raw SQL through Data Studio is logged in Audit Logs v1, so "data-level destruction stays unwatched" is no longer true of it; whether the watch reads v1 is left to the hijack ticket. The yearly token rotation produces an expected digest email for every rolled token.
 
 # Watch Audit Logs v2 from the Status Worker for destructive changes, and email the Operator a digest
 

@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): `deployment.json` gains `location_hints`; the `admin` job touches all 256 shards after deploying `links-data` and reports where each landed; the `plan` job fails when a hint differs from the one first applied.
+>
+> Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): the `production-plan` token takes Metadata Read-Only in place of Workers Scripts Read and gains R2 read. The weekly drift job also plans the hand-applied backup bucket configuration, and fails when its own token has under 30 days left.
 
 # Deliver through reusable workflows called from each ops repo: plan read-only, apply behind at most one approval, and drill restores in a throwaway environment
 

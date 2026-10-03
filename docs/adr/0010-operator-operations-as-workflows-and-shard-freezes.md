@@ -9,6 +9,8 @@ status: accepted
 > Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): the audit record of a takedown or a `creators remove --delete-links` lists every Link it deleted with its Target URL, because the shard erases the URL on deletion and the record is the Operator's evidence.
 >
 > Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): `creators suspend` and `creators resume` are Workflows that call the Creator object. `links find` gains `--creator` and `--created-since`. Past the daily ceiling the Creator object makes Takedowns itself, with `deleted_by='operator'` and the reason "over daily ceiling", and writes their audit record under `ops/`.
+>
+> Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): Operator-only shard and Creator-object methods take an `OPERATOR_GATE` secret that only `links-data` holds, so `redirect` can't call them. The `operator` token drops KV Edit and the laptop's R2 key becomes Object Read only; `links-data` writes every `ops/` and `auth/` object, and `ops record` audits a break-glass action afterwards. Corrections: Data Studio SQL is logged in Audit Logs v1, and `query/v2` is a published API.
 
 # Run Operator operations as Workflows in `links-data`, audit them in the backup bucket, and freeze shards during restores
 

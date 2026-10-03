@@ -11,6 +11,8 @@ status: accepted
 > Amended by [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md): the OIDC trust rule's `repository_id`, `environment` claim and `main`-only rule belong to the deployment's ops repo, which calls this repo's reusable workflows. This repo holds no credentials.
 >
 > Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): a Creator can be suspended, by the Operator or by the daily ceiling. A Suspended Creator gets the uniform 401 on every Link API call while its Links keep redirecting. The Link API reads `suspended:<creatorId>` in `FLAGS` after verifying the credential. The CLI gains `creators suspend` and `creators resume`.
+>
+> Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): every Operator CLI command that writes `AUTH` is a Workflow in `links-data`, which now binds `AUTH`. The CLI generates an API key locally and sends only its hash, and holds no KV Edit. The broad token may write `AUTH` directly only as break-glass.
 
 # Creators authenticate with Operator-issued API keys checked through KV, and CI with GitHub OIDC
 
