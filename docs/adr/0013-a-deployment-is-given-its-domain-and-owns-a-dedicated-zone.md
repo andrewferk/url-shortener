@@ -5,6 +5,8 @@ status: accepted
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): each Short domain maps to exactly one Namespace, resolved from the request's hostname. A deployment today maps its `base_domain` to the `default` Namespace.
 >
 > Amended by [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md): the ban on committed deployment values covers this repo. Each deployment's ops repo commits its own non-secret config.
+>
+> Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): `infra/zone` adds an Email Routing rule forwarding `abuse@` to the Operator's verified address, and the Status Worker serves the deployment's abuse policy at `/abuse`.
 
 # A deployment is given its domain and owns a dedicated zone
 
