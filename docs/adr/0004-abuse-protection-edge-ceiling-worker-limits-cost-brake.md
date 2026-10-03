@@ -7,6 +7,8 @@ status: accepted
 > Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): the cost brake's flag and the per-Creator daily-cap flag live in their own `FLAGS` KV namespace, as dated keys `brake:<utc-date>` and `cap:<creatorId>:<utc-date>`. The daily count is derived from the Creator list's `created_at`.
 >
 > Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the brake's daily count is `sum(sample_interval * _sample_interval)` over the `shard-fallback` and `not-found` index values, so it stays correct once Analytics Engine samples.
+>
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): the shard-fallback limit bounds shard cost, not guessing, which runs at the edge ceiling's rate and is accepted. IPv6 misses also pass a /48 limiter (120 per 60 s). The brake's window is one UTC hour (125,000 lookups, flag `brake:<utc-hour>`, cached in isolate memory). The Status Worker sends a "Redirect flood" alert, and the spend alert is a manual step, not an OpenTofu resource.
 
 # Protect against abuse with one edge flood ceiling, Worker-side limits on the shard fallback and on Creators, and a daily cost brake
 

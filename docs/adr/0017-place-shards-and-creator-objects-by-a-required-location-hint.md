@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): `shard-fallback` stays eligible for the latency Objective; `not-found` no longer is.
+
 # Place shards and Creator objects by a required location hint, with optional hints for D1 and R2 and no jurisdiction
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) said "there are no regions to choose". That holds for the Workers, but not for what they store. Cloudflare creates a Durable Object "close to where the initial `get()` request is made", and objects "do not currently change locations after they are created". [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) made the object names permanent and no ADR passed a `locationHint`, so each of the 256 shards would have landed, for good, near whichever Visitor, bot, Creator or CI run reached it first. A Creator's object is first reached by a shard's outbox alarm, so it would have landed near that shard.

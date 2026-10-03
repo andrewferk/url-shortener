@@ -9,6 +9,8 @@ status: accepted
 > Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the additive counts are `sum(sample_interval * _sample_interval)`; Probe-minutes the rollup can no longer observe (healed buckets past Grafana's 14 days) leave the uptime denominator and are shown as unobserved.
 >
 > Amended by [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md): the Grafana alerts are rules we own on `probe_success`: "Redirects down" (no location succeeded over three Probe frequencies, at least two reporting), "Status page stale" (neither of two locations succeeded for 20 minutes) and a new "Probes blind". The per-check `ProbeFailedExecutionsTooHigh` alert is dropped. A fire drill proves the rule before launch. Executions are about 75.9k of 100k.
+>
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): the Status Worker also sends a "Redirect flood" alert when Redirect volume of every outcome exceeds `flood_alert_requests_per_second` (default 100) for two consecutive buckets. `not-found` leaves the latency Objective's eligible set and stays in the error-rate one, so each bucket stores an eligible count per Objective.
 
 # Report three rolling 30-day Objectives from additive rollup counts, and alert the Operator by email from both Grafana and the Status Worker
 
