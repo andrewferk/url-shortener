@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > Amended by [ADR 0018](./0018-hash-the-case-folded-short-code-keep-aliases-case-sensitive-reserve-case-insensitive-mode.md): the shard number hashes `<Namespace ID>:<fold(Short code)>`, lowercasing the Short code first. Every other use of the Short code in this encoding keeps the exact form.
+>
+> Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the Redirect event's index is `<Namespace ID>:<source>:<outcome>`, not `<Namespace ID>:<Short code>`. The Short code is a blob, and the `namespace` blob stays.
 
 # Identify every Link by an opaque Namespace plus its Short code, so one deployment can serve many Short domains
 

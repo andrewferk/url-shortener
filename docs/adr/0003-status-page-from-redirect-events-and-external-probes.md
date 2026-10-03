@@ -5,6 +5,8 @@ status: accepted
 > Amended by [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md): the SLO targets are decided (three rolling 30-day Objectives). Redirect events gain an `error` outcome, recorded by a catch-all handler. Every rollup bucket also stores additive counts for Error budgets. A second Synthetic Monitoring check alerts when the snapshot goes stale.
 >
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): a Redirect event's index is `<Namespace ID>:<Short code>`, and it gains a `namespace` blob. The Status page stays deployment-wide.
+>
+> Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the index is `<Namespace ID>:<source>:<outcome>` and the Short code becomes a blob; `sample_interval = N` (an integer) replaces `weight`; every count is `sum(sample_interval * _sample_interval)` and percentiles weight by `_sample_interval`; each bucket stores `rows_read` and `max_sample_interval`, judges "insufficient data" on rows and shows "estimated" when sampled; the rollup heals missing buckets itself, bounded per run.
 
 # Feed the Status page from self-timed Redirect events and external Probes, served by a separate Status Worker
 

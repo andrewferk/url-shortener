@@ -5,6 +5,8 @@ status: accepted
 > Amended by [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md): force shedding is a Worker variable ORed with the cost brake's KV flag, not a KV flag written by OpenTofu.
 >
 > Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): the cost brake's flag and the per-Creator daily-cap flag live in their own `FLAGS` KV namespace, as dated keys `brake:<utc-date>` and `cap:<creatorId>:<utc-date>`. The daily count is derived from the Creator list's `created_at`.
+>
+> Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the brake's daily count is `sum(sample_interval * _sample_interval)` over the `shard-fallback` and `not-found` index values, so it stays correct once Analytics Engine samples.
 
 # Protect against abuse with one edge flood ceiling, Worker-side limits on the shard fallback and on Creators, and a daily cost brake
 
