@@ -6,6 +6,8 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): compaction checks the invariant below, and on a violation alerts and stops that shard's compaction.
 
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the Consequences line on ADR 0006 quotes the delete bound as about 60 s.
+
 # Links are immutable, and deleting a Link erases its Target URL
 
 Immutability was never decided on its own. [ADR 0006](./0006-redirect-caching-kv-values-colo-cache-no-store.md) called changing a Target URL or Expiry "off the table" because the caches had no invalidation story, and [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) built the change log on the premise that "a Link's fields never change", so replay merges entries in any order by "the deleted one wins". The PRD's [features review](https://github.com/andrewferk/url-shortener/issues/40#issuecomment-5942436020) found the cache reason weak (an edit would ride the same outbox and TTLs as a delete, about 90 s) and the log the real blocker, and asked for editing to be decided on its merits. The [security review](https://github.com/andrewferk/url-shortener/issues/40#issuecomment-5942073170) found the opposite gap: a Deleted link keeps its Target URL forever in the shard, the Creator list and the locked change log, and Target URLs often carry tokens or personal data.
@@ -94,7 +96,7 @@ No slice moves between milestones.
 
 ## Consequences
 
-- **Amends ADR 0006:** immutability of the Target URL and Expiry is a chosen property of a Link, not a consequence of the caches. The 90 s delete bound is unchanged.
+- **Amends ADR 0006:** immutability of the Target URL and Expiry is a chosen property of a Link, not a consequence of the caches. The delete bound is unchanged by this decision (about 60 s since ADR 0006 was amended).
 - **Amends ADR 0008:** a Deleted link no longer keeps its Target URL in the shard; the row holds the empty string and `target_url_sha256`. The merge rule "the deleted one wins" is unchanged and is now a deliberate choice. The Creator list's deleted rows carry an empty `target_url`. "A shard rebuilt from `LINKS` loses deletion details" now includes the hash.
 - **Amends ADR 0009:** a keyed create that finds its own deleted row compares the request's Target URL by hash. Key reuse is still caught.
 - **Amends ADR 0010:** takedown and Creator-removal audit records carry the Target URL of every Link they delete.

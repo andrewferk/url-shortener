@@ -22,6 +22,8 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): compaction checks ADR 0019's invariant and stops a shard's compaction on a violation. `links-data` signs every object it writes to the backup bucket, and compaction and restores skip an unsigned or wrongly signed object. An hourly Cron Trigger on `links-data` sweeps `LINKS` against the shards and counts Creator deletes. "Compaction must be monitored" is answered by a heartbeat to Grafana.
 
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the Creator ID `c` stays in `LINKS` values for good, since per-Creator analytics would need it. Without `WITHOUT ROWID`, a plain `TEXT PRIMARY KEY` would roughly double billed row writes (an inference, measured in slice 1.3). Editor on one Worker can bind any KV, R2 or D1 resource, as a documented fact. Durable Object calls use RPC methods.
+
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) put every Link in one of 256 SQLite Durable Object shards, projected into Workers KV for Redirects and into one Durable Object per Creator for listing. This ADR fixes the shapes those three copies take and how they're kept recoverable.
@@ -42,7 +44,7 @@ Decided in [What is the Link data model across shards, KV, and Creator lists?](h
   - Custom aliases aren't random, so the Short code's own characters would cluster them onto a few shards.
   - A keyed hash would stop a Creator grinding aliases onto one shard, but it would bring back the permanent secret ADR 0002 rejected. Creator limits and the 10 GB shard ceiling already bound grinding.
 - **The domain core owns the hash,** pinned by test vectors, so any future adapter reproduces it exactly.
-- **Object names:** shard *n* is `idFromName("shard-" + n)`, with *n* in decimal. A Creator's object is `idFromName(creatorId)`. Both names are permanent.
+- **Object names:** shard *n* is `idFromName("shard-" + n)`, with *n* in decimal. A Creator's object is `idFromName(creatorId)`. Both names are permanent. Every call to either object is an RPC method call.
 
 ### The shard
 
@@ -66,7 +68,7 @@ CREATE TABLE links (
 - **No secondary indexes.** Every shard lookup is by Short code, and each index would add billed row writes.
 - **Timestamps are epoch milliseconds** in the shard, KV and the Creator lists.
 - **Storage:** ADR 0001's ≈2 GB per shard at 1B Links means about 500 bytes per Link. The Link API's Target URL length cap must keep the *average* well under the 10 GB ceiling, which is about 2.5 KB per Link.
-- `STRICT` and `WITHOUT ROWID` are used if Durable Object SQLite accepts them. Otherwise the tables are plain, with the same keys.
+- `STRICT` and `WITHOUT ROWID` are used if Durable Object SQLite accepts them. Cloudflare doesn't document either. Otherwise the tables are plain, with the same keys, and a plain `TEXT PRIMARY KEY` would roughly double billed row writes: in an ordinary SQLite table the primary key is a separate unique index, and Cloudflare bills every index update as another row written. That is an inference, so slice 1.3 measures it with `cursor.rowsWritten` when it settles the keywords.
 
 ### The outbox
 
@@ -95,7 +97,7 @@ CREATE TABLE outbox (
 
 ### KV
 
-- **Three namespaces,** so no binding can delete what it doesn't own. A KV binding that can write can also delete.
+- **Three namespaces,** so no binding can delete what it doesn't own. A KV binding that can write can also delete. This guards against a bug, not a credential: Cloudflare documents that Editor on one Worker can bind it to any KV, R2 or D1 resource without permission on that resource ([ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md)).
 
   | Namespace | Holds | Written by | Read by |
   |---|---|---|---|
@@ -112,7 +114,7 @@ CREATE TABLE outbox (
 - **`LINKS` values** are versioned JSON, read with `type: "json"`:
   - live: `{"v":1,"t":"<Target URL>","e":<Expiry ms>,"c":"<Creator ID>","ts":<created_at ms>}`. The `e` is left out when there's no Expiry.
   - deleted: `{"v":1,"d":1,"c":"<Creator ID>","ts":<created_at ms>}`. A tombstone drops the Target URL and the Expiry, so a takedown removes the URL from the public read copy.
-  - `c` and `ts` aren't needed to Redirect. They make KV a complete second copy of every Link except deletion details, so the shards can be rebuilt from it. With the change log in place, they cover only what the log can't: its last minute, and losing the backup bucket together with `links-data`. They cost $0 today and could be dropped later for free. Adding them back later would mean rewriting every value.
+  - `c` and `ts` aren't needed to Redirect. They make KV a complete second copy of every Link except deletion details, so the shards can be rebuilt from it. With the change log in place, they cover only what the log can't: its last minute, and losing the backup bucket together with `links-data`. They cost $0 today. `c` stays for good: per-Creator analytics would need the Creator ID on the read path, and adding it back later would mean rewriting every value.
   - Nothing goes in KV metadata.
   - The shard answers the Worker's KV-miss fallback with the same value shape.
 
@@ -236,7 +238,7 @@ This stays inside ADR 0001's ≈$11–25k/mo peak range.
 - **An event outbox** (created, deleted) with payload snapshots. It needs ordered delivery to stop a stale create landing after a delete. Sending current state per item needs no ordering.
 - **One KV namespace with key prefixes.** The same cost, but every binding that writes Link values could also delete credentials.
 - **Bare Short codes as `LINKS` keys.** Then one shard's reconcile means listing all 1B keys, which is about 1M list calls and can't be spread per shard.
-- **A lean KV value** (Target URL, Expiry and state only). It saves ≈$25/mo at peak. With the change log, KV's full copy only covers the log's last minute and a lost bucket. It's kept because dropping it later is free, while adding it back would mean rewriting every value (≈$5k at 1B Links).
+- **A lean KV value** (Target URL, Expiry and state only). It saves ≈$25/mo at peak. With the change log, KV's full copy only covers the log's last minute and a lost bucket. It's kept because adding it back would mean rewriting every value (≈$5k at 1B Links), and per-Creator analytics would need the Creator ID there.
 - **A Creator list of Short codes only,** fetching details from the shards on each listing. A 50-Link page would cost up to 50 Durable Object requests.
 - **A Creator list keyed by Short code with a `(created_at, short_code)` index.** It pages just as efficiently, but it writes twice the rows per arrival and needs a lookup per listed row.
 - **Point-in-time recovery plus rebuilding each copy from the other, with nothing in R2.** It costs nothing, but it can't survive losing `links-data` and `LINKS` together, or corruption older than 30 days.

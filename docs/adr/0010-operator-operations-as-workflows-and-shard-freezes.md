@@ -12,6 +12,8 @@ status: accepted
 >
 > Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): Operator-only shard and Creator-object methods take an `OPERATOR_GATE` secret that only `links-data` holds, so `redirect` can't call them. The `operator` token drops KV Edit and the laptop's R2 key becomes Object Read only; `links-data` writes every `ops/` and `auth/` object, and `ops record` audits a break-glass action afterwards. Corrections: Data Studio SQL is logged in Audit Logs v1, and `query/v2` is a published API.
 
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Creator removal takes about 30 s to stop creates. Durable Object calls use RPC methods. Fan-out uses `createBatch` and a rerun uses `restart`. `workers_dev` and `preview_urls` are `false` on all three Workers. A Cost section states that Workflow steps are billed: a full reconcile at peak is about 1.02M steps, $4.19 over the included amount.
+
 # Run Operator operations as Workflows in `links-data`, audit them in the backup bucket, and freeze shards during restores
 
 The shard and Creator Durable Objects live in `links-data`, which has no routes and deploys only through `production-admin` ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). There is no admin endpoint ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)). Yet the Operator must reach that data:
@@ -31,7 +33,7 @@ Decided in [How does the Operator reach Link data (takedowns, Creator removal, r
 
 - **Every Operator operation that touches Link data is a Workflow instance in `links-data`,** even a single takedown.
   - The Operator CLI starts it through Cloudflare's Workflows REST API.
-  - Its steps call the shard and Creator objects' own methods through the Worker's bindings.
+  - Its steps call the shard and Creator objects' own RPC methods through the Worker's bindings.
   - No route, HTTP endpoint or service binding is added.
 - **An operation writes only shard rows and outbox items.** The existing outbox drain stays the only writer to `LINKS`, the Creator lists and the change log. A second writer could land a stale value over a tombstone.
   - A re-drive marks outbox items pending a page at a time. It adds the next page only while that shard has fewer than 10k items pending for that destination (a `links-data` variable).
@@ -42,7 +44,7 @@ Decided in [How does the Operator reach Link data (takedowns, Creator removal, r
   - Reads are allowed for investigation.
   - A write is break-glass, for when the Workflow path itself is broken. It must insert the matching `outbox` rows, the shard is reconciled afterwards, and the Operator writes the audit record by hand.
   - The Operator CLI never uses raw SQL.
-- **`links-data` sets `workers_dev = false` and `preview_urls = false` explicitly.** The render script fails the deploy if either is missing or true.
+- **All three Workers set `workers_dev = false` and `preview_urls = false` explicitly,** not only `links-data`. The render script fails the deploy if either is missing or true on any of them. `preview_urls` has to be stated: `workers_dev = false` does not disable Version or Preview URLs, and an omitted `preview_urls` leaves the stored setting alone.
 
 ### Credentials
 
@@ -79,7 +81,7 @@ Decided in [How does the Operator reach Link data (takedowns, Creator removal, r
 ### Removing a Creator with its Links
 
 The Creator's list is the only index of its Links, and a Link can reach the list long after it's created (up to an hour's backoff per retry). So a single walk can miss Links. `creators remove --delete-links` runs in this order:
-1. Mark the Creator removed in `AUTH`. New creates stop within about a minute.
+1. Mark the Creator removed in `AUTH`. New creates stop within about 30 s ([ADR 0006](./0006-redirect-caching-kv-values-colo-cache-no-store.md)'s `cacheTtl`).
 2. Set a permanent `removed_with_links` flag in the Creator object's `meta`. From then on, every Link that arrives in its list is taken down on arrival: the Creator object calls the shard's delete with `deleted_by='operator'`.
 3. Walk the list and take down every Link that's still live.
 
@@ -88,10 +90,10 @@ A re-run changes nothing. A late Link still redirects until it reaches the list:
 ### Long-running jobs
 
 - **Shard-wide operations fan out:** reconcile, re-drive, log replay and re-seed.
-  - A parent instance starts one child per shard (`op_…-<nn>`). `--concurrency` sets how many run at once, 256 by default.
+  - A parent instance starts one child per shard (`op_…-<nn>`) with `createBatch`, which skips an ID that already exists within its retention, where `create` would throw. `--concurrency` sets how many run at once, 256 by default.
   - The parent checks its children once a minute and writes the final counts.
 - **One step handles one page** of 1,000 keys or rows, and returns the next cursor as its result. A reconcile at peak is about 4k steps per shard, under the 10k default step limit. Each step retries with backoff.
-- **Every step can safely run twice.** Inserts use `ON CONFLICT DO NOTHING`, and outbox items are state-based. So resuming is either restarting the failed child or rerunning the whole operation.
+- **Every step can safely run twice.** Inserts use `ON CONFLICT DO NOTHING`, and outbox items are state-based. So resuming is `restart` on the failed child, or on every child. `restart` is the documented way to run an existing instance ID again; a second `createBatch` only starts the children that don't exist yet.
 - **The CLI has `ops status <op>`** (which sums up the children) and **`ops pause|resume|cancel <op>`.**
 
 ### Freezing a shard during a restore
@@ -126,6 +128,14 @@ While a shard is frozen:
 - **Restores that fix no bad data skip the review.** These are a deleted namespace and a lost bucket.
 - **Re-seeding a lost bucket:** each shard scans its `links` table in primary-key order, which is Short code order. It writes a full snapshot named by the time the scan started. The log keeps running during the scan, so the snapshot plus every minute object since that time is complete.
 
+## Cost
+
+Workflow steps are billed. Workers Paid includes 500,000 a month, then $0.80 per 100,000. Cloudflare says billing starts "no earlier than" 2026-08-10, and no page says it has begun. A sleep or a wait for an event counts as a step; a retry doesn't.
+
+**Today:** $0. A takedown or a key command is a handful of steps.
+
+**Peak** (1B Links): a full reconcile is about 256 × 4,000 = 1.02M steps. That is about $4.19 over the included amount if the month's allowance is otherwise unused, and about $8.19 if it is already spent. The parent's once-a-minute checks add about two steps a minute. Whether billing rounds up to whole 100,000s is not documented.
+
 ## Considered options
 
 - **A Queue consumer in `links-data`, fed through Queues' HTTP API.** It needs an account-wide Queues Edit token and has no per-job status. Resuming would have to be hand-built.
@@ -148,4 +158,4 @@ While a shard is frozen:
 - **A rollback can leave a shard frozen for up to 7 days** while it waits for review.
 - **The backup bucket gains `ops/`,** locked for 90 days and never retired.
 - **Restore drills belong in a preview.** A preview runs the same Workflows against its own `links-data`, and its bucket has no lock.
-- **Workflow limits are now a dependency:** the step limit and 30-day retention. Pages must stay large enough that a shard's job fits the step limit as shards grow.
+- **Workflow limits and pricing are now a dependency:** the step limit, 30-day retention and billed steps. Pages must stay large enough that a shard's job fits the step limit as shards grow.
