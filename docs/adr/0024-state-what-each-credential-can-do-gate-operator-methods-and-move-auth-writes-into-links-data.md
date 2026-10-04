@@ -6,6 +6,8 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): noticing is decided. `links-data` sweeps `LINKS` against the shards, signs the backup bucket's objects and alerts on an abnormal delete rate; the ops repo compares the live Workers and zone with `main` every hour. `links-data` gains a `send_email` binding, a signing key and a Grafana write token. `AUTH` and `FLAGS` tampering is still found by this ADR's runbook, not detected.
 
+> Amended by [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md): the hand-applied backup bucket configuration's state uses a 32-random-byte passphrase, with `enforced` set.
+
 # State what each credential can do to Link data, gate Operator methods with a secret, move `AUTH` writes into `links-data`, and take the backup locks out of CI's reach
 
 [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) says "nothing that runs unattended in prod can delete anything". It reasons about API-token permissions, and it is false for data. A token that can deploy a Worker controls everything that Worker can bind, and three Cloudflare facts mean a binding can't be fenced:

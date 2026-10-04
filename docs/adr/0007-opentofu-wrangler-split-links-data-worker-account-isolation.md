@@ -22,6 +22,8 @@ status: accepted
 >
 > Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): `creators add` also refuses a first real Creator until the off-account copy is configured and its heartbeat is fresh, unless `offsite_backup` is `"none"`.
 
+> Amended by [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md): `links-data` declares its Durable Objects with `exports`, not tagged `migrations`; the class-delete guard is documented for `exports`, and the restore drill asserts the Worker-delete one. OpenTofu is pinned to 1.13.x. The state passphrase is 32 random bytes, `enforced` is set on state and plan, and rotation is by event, through a runbook.
+
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 
 Cloudflare has no lock, trash or restore for a deleted Worker, KV namespace, D1 database or Durable Object namespace. Deleting a Worker also deletes the Durable Object namespaces it implements, so under [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)'s single Worker, one wrong delete loses every Link and tombstone. So the layout is designed around what each credential *can* destroy.

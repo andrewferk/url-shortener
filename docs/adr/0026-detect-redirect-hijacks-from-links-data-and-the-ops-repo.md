@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md): in the single-account phase the hourly integrity job also lists preview Workers and fails when one has no active deployment record.
+
 # Detect Redirect hijacks from `links-data` and the ops repo: sweep `LINKS` against the shards, sign the change log, and compare the live zone and Workers with `main` every hour
 
 Rewriting where Short URLs go is the highest-value attack on a shortener, and nothing in the design would notice it. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) says the unattended `production` token can answer Visitors anything and rewrite `LINKS`, and that recovery "depends on someone noticing within the window". [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)'s watch covers resources, not data, and skips Worker deploys, routes and Email Routing.
