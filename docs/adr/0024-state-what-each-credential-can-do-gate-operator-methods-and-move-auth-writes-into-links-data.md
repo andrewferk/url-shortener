@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): the `operator` token gains User Details Read, for `doctor`'s 2FA check, and the off-account write key joins the annual rotation.
+
 # State what each credential can do to Link data, gate Operator methods with a secret, move `AUTH` writes into `links-data`, and take the backup locks out of CI's reach
 
 [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) says "nothing that runs unattended in prod can delete anything". It reasons about API-token permissions, and it is false for data. A token that can deploy a Worker controls everything that Worker can bind, and three Cloudflare facts mean a binding can't be fenced:
