@@ -20,7 +20,7 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `links-data` signs every object it writes to the backup bucket, `ops/` records included, and a restore skips an unsigned or wrongly signed object unless an override is given, which its audit record notes. A new Operator operation resumes a compaction that the invariant check stopped, naming the objects to drop or keep. The hourly `LINKS` sweep skips a frozen shard.
 
-> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the audit record of an `AUTH` command follows ADR 0024.
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the audit record of an `AUTH` command follows ADR 0024. The `operator` token and the laptop's R2 key follow ADRs 0024 and 0025.
 
 # Run Operator operations as Workflows in `links-data`, audit them in the backup bucket, and freeze shards during restores
 
@@ -59,8 +59,10 @@ Decided in [How does the Operator reach Link data (takedowns, Creator removal, r
 - **The Operator CLI uses a dedicated `operator` API token, not the Operator's broad token.** It holds:
   - Editor on `links-data`, for starting, controlling and sending events to Workflow instances;
   - Workers Scripts Read, for instance status;
-  - KV Edit, for ADR 0005's `AUTH` records.
-- **The CLI also uses an R2 key scoped to the backup bucket** with Object Read & Write, for `links find` and the `auth/` exports. It can't change the bucket's lock rules or delete a locked object.
+  - User Details Read, for `doctor`'s 2FA check ([ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md)).
+
+  It held KV Edit, for ADR 0005's `AUTH` records, until [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) moved every `AUTH` write into `links-data`.
+- **The CLI also uses an R2 key scoped to the backup bucket** with Object Read only (ADR 0024; it was Read & Write, for the `auth/` exports too), for `links find`. It can't change the bucket's lock rules or delete a locked object.
 - **Neither credential has Workers Admin, R2 admin, DNS or zone rights.** The broad token stays in the password manager for bootstrap and for recreating deleted resources. Recreating goes through OpenTofu or `production-admin` anyway.
 - **Both are created in `infra/bootstrap`** and kept in the password manager.
   - Bootstrap checks that a per-Worker Editor scope covers the `/workflows/*` endpoints. Cloudflare doesn't document whether it does.

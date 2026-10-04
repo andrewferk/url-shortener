@@ -4,7 +4,7 @@ status: accepted
 
 > Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): `infra/env` also owns an R2 backup bucket bound to `links-data`, with a bucket lock and `prevent_destroy` in prod only. So `production-admin` also needs R2 edit.
 >
-> Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): `infra/bootstrap` also creates the Operator CLI's `operator` token (Editor on `links-data`, Workers Scripts Read, KV Edit) and an R2 key scoped to the backup bucket. `links-data` also holds the Operator Workflows, and sets `workers_dev = false` and `preview_urls = false`, which the render script enforces.
+> Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): `infra/bootstrap` also creates the Operator CLI's `operator` token (Editor on `links-data`, Workers Scripts Read, KV Edit) and an R2 key scoped to the backup bucket. ADR 0024 later dropped KV Edit and made the R2 key Object Read only. `links-data` also holds the Operator Workflows, and sets `workers_dev = false` and `preview_urls = false`, which the render script enforces.
 >
 > Amended by [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md): `infra/zone` also owns Email Routing and the Operator's verified destination address, so the `production` token gains Email Routing permissions. When `probes_enabled`, `infra/env` also owns the Grafana contact point, notification policy and check alerts, plus a Status page check that brings prod to about 93.7k of Grafana Free's 100k monthly executions (about 75.9k since ADR 0021). The Status Worker gains a `send_email` binding.
 >
@@ -17,6 +17,10 @@ status: accepted
 > Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): the D1 database and every R2 bucket, the state buckets included, are created with the deployment's optional `location_hints.d1` and `location_hints.r2`. A hint can't change once applied.
 >
 > Amended by [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md): `infra/bootstrap` holds one OpenTofu configuration, applied by hand, that installs Grafana Synthetic Monitoring; its state has its own key and a passphrase only the Operator holds, and is the one state that deliberately holds a secret. `infra/env` owns a Grafana rule group in place of the per-check alerts, and takes `probe_frequency_seconds`, `probe_locations` and `status_check_locations`.
+
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): `infra/env` takes `flood_alert_requests_per_second` (default 100), and the cost brake applies one twenty-fourth of `cost_brake_daily_threshold` per UTC hour.
+
+> Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): `infra/env` takes `creator_daily_link_ceiling` (default 600) and `abuse_response_hours` (default 24). The Status Worker binds `FLAGS`, and `infra/zone` owns the `abuse@` Email Routing rule.
 >
 > Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): "nothing that runs unattended in prod can delete anything" is replaced by a recoverability claim and a table of what each credential can do to Link data. Prod's backup bucket and its locks move to a hand-applied configuration in `infra/bootstrap`, so `production-admin` loses R2 edit and `production-plan` gains R2 read. Each `links-data` deploy pushes a fresh `OPERATOR_GATE` secret. Every token expires after 13 months, is rotated yearly and uses the narrowest Workers role.
 >
@@ -28,7 +32,7 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `links-data` gains an hourly Cron Trigger, its own `send_email` binding and two secrets set by hand, the backup signing key and a Grafana write token. Every deploy run records the live version IDs of all three Workers in a GitHub deployment record, which the ops repo's hourly integrity job compares with what is live.
 
-> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body now carries what ADRs 0010, 0011, 0016, 0021, 0024, 0026 and 0027 changed: the recoverability claim, `exports`, OpenTofu 1.13.x, the Probe count, and the credentials table, which gains `production-plan`.
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body now carries what ADRs 0010, 0011, 0016, 0021, 0024, 0026 and 0027 changed: the recoverability claim, `exports`, OpenTofu 1.13.x, the Probe count, and the credentials table, which gains `production-plan`. The parameters table gains the inputs of ADRs 0022 and 0023, the `status` row lists its later bindings, and Synthetic Monitoring is installed by OpenTofu (ADR 0021).
 
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 
@@ -51,7 +55,7 @@ There are three Workers per environment. In prod each is named as below; in a pr
 |---|---|---|
 | `redirect` | Redirects on the short domain, and the Link API on `api.` | ADR 0004's cost-brake Cron Trigger. No Durable Object classes. |
 | `links-data` | No routes | The shard and Creator Durable Object classes and their outbox. `redirect` binds to them with `script_name`. |
-| `status` | The Status page on `status.` ([ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md)) | Its D1 binding and rollup Cron Trigger |
+| `status` | The Status page on `status.` ([ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md)) | Its D1 database, its `FLAGS` binding ([ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md)), its `send_email` binding ([ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)), its read tokens, and the rollup Cron Trigger |
 
 Moving the classes out of `redirect` changes no latency: a call to a Durable Object is a network hop either way. It also brings in two Cloudflare guards:
 - a non-forced delete of `links-data` is refused while `redirect` binds to it;
@@ -93,7 +97,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - the state buckets and their bucket-scoped R2 keys;
   - the Cloudflare API tokens;
   - creating each Worker once (only product-level Admin can create a Worker);
-  - the Grafana stack, with Synthetic Monitoring switched on in the UI (the installation can't be imported);
+  - the Grafana stack, with Synthetic Monitoring installed by a hand-applied OpenTofu configuration that lives here ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)), not switched on in the UI;
   - the Status Worker's two read tokens.
 - **`infra/zone`:** one state per Cloudflare account, holding everything that exists once per zone or account:
   - zone settings and all rulesets;
@@ -152,6 +156,9 @@ These are variables of `infra/env`. They reach the Workers through the rendered 
 | `cost_brake_daily_threshold` (ADR 0004; ADR 0022 applies one twenty-fourth of it per UTC hour) | 3M (125,000 an hour) | **100k** (about 4,167 an hour) |
 | `force_shedding` (ADR 0004) | false | false |
 | `creator_burst_per_minute`, `creator_daily_link_cap` (ADR 0004) | 60, 300 | 60, 300 |
+| `creator_daily_link_ceiling` (ADR 0023) | 600 | 600 |
+| `flood_alert_requests_per_second` (ADR 0022; the alert is sent in prod only) | 100 | 100 |
+| `abuse_response_hours` (ADR 0023) | 24 | 24 |
 | `probes_enabled` | true | false |
 | OIDC trust ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)): `repository_id`, `environment` claim, `aud` | `production`, the `api.` origin | `preview`, the `pr-<n>-api` origin |
 | Rate limiter namespace IDs | a fixed block | derived from `<n>`, disjoint from every other environment |

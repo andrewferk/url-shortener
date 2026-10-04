@@ -11,15 +11,15 @@ The stored mapping from a Short code to a Target URL, optionally carrying an Exp
 _Avoid_: Short URL (as a name for the record), mapping, entry
 
 **Short code**:
-The case-sensitive key that identifies a Link in its short URL: 7 random base62 characters when generated. Unique within its Namespace, and never reused there once issued. Only a disaster that loses the record of a Link can break this.
+The case-sensitive key that identifies a Link in its Short URL: 7 random base62 characters when generated. Unique within its Namespace, and never reused there once issued. Only a disaster that loses the record of a Link can break this.
 _Avoid_: Slug, hash, key, token
 
 **Namespace**:
-The scope within which a Short code is unique. Every Link belongs to exactly one Namespace, and each Short domain serves exactly one. A deployment starts with a single default Namespace.
+The scope within which a Short code is unique. Every Link belongs to exactly one Namespace, and each Short domain serves exactly one. A Deployment starts with a single default Namespace.
 _Avoid_: Tenant, workspace, domain
 
 **Short domain**:
-A domain that a deployment of the service answers Redirects on, for one Namespace. It is given to the deployment, not chosen by the service.
+A domain that a Deployment answers Redirects on, for one Namespace. It is given to the Deployment, not chosen by the service.
 _Avoid_: Vanity domain, host
 
 **Short URL**:
@@ -72,13 +72,13 @@ The person who runs the service: admits and removes Creators and can take down a
 _Avoid_: Admin, superuser
 
 **Visitor**:
-Anyone, unauthenticated, who follows a short URL.
+Anyone, unauthenticated, who follows a Short URL.
 _Avoid_: User, client
 
 ### Operations
 
 **Deployment**:
-One running instance of the service, run by one Operator, with its own Cloudflare account, Short domains and Namespaces.
+One running instance of the service, run by one Operator, with its own Cloudflare accounts, Short domains and Namespaces.
 _Avoid_: Instance, install
 
 **Ops repo**:
@@ -94,7 +94,7 @@ The command-line interface through which the Operator admits and removes Creator
 _Avoid_: Admin API, admin tool
 
 **Redirect**:
-Answering a Visitor's request for a short URL: a 302 to the Target URL for a live Link, 410 Gone for an Expired or Deleted link, and 404 when no Link has that Short code in the Short domain's Namespace.
+Answering a Visitor's request for a Short URL: a 302 to the Target URL for a live Link, 410 Gone for an Expired or Deleted link, and 404 when no Link has that Short code in the Short domain's Namespace.
 _Avoid_: Lookup, resolve, forward
 
 **Status page**:
@@ -130,5 +130,5 @@ One minute of the uptime Objective's window, judged up, down, or unobserved by t
 _Avoid_: Probe run, check, tick
 
 **Canary link**:
-The Link that Probes follow. Its Redirects count toward Redirect latency but not request volume.
+The Link that Probes follow. Its Redirects count toward the Status page's Redirect latency percentiles, but not toward request volume or any Objective.
 _Avoid_: Test link, health link

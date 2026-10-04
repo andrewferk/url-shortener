@@ -12,7 +12,7 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `infra/zone` publishes no CAA records. Certificate Transparency Monitoring is turned on by hand at bootstrap, so a mis-issued certificate is detected, not prevented.
 
-> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's CAA bullet follows ADR 0026.
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's CAA bullet follows ADR 0026. The Cloudflare Registrar bullet follows ADR 0025.
 
 # A deployment is given its domain and owns a dedicated zone
 
@@ -74,7 +74,7 @@ This is guidance for operators, written into the build's docs. It isn't decided 
 - **Avoid TLDs with bad abuse reputations,** such as `.cc` and `.click`. Mail and security filters punish them, and shorteners are already filtered.
 - **Budget the renewal against the worst month.** At ADR 0004's defaults, Workers Paid ($5) plus a month of the cost brake's ceiling (about $13) leaves about $24 a year for the domain within $20 a month.
 - **Short names are often registry-premium,** at hundreds of dollars a year. Check the renewal price at checkout.
-- **Cloudflare Registrar** charges renewals at cost and gives one-click DNSSEC.
+- **Cloudflare Registrar** charges renewals at cost and gives one-click DNSSEC. [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md) advises against it all the same: keep the registrar outside the prod Cloudflare account.
 
 ## Cost
 

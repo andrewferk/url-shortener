@@ -14,7 +14,7 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the render script requires `workers_dev` and `preview_urls` to be `false` on all three Workers, and allowlists fields from a pull request's `wrangler.base.jsonc`. A hardening section adds the committed lock file, SHA-pinned actions, `npm ci --ignore-scripts`, `tofu_wrapper: false`, secret-free `tofu init` for forks, and no pull-request metadata in `run:`. `production-admin` holds a Grafana stack token and the Synthetic Monitoring token; `grafana_notification_policy` owns the whole policy tree, imported first; the Canary link check sets `no_follow_redirects` and `valid_status_codes = [302]`. A drill is about 51,000 billed Workflow steps: inside Workers Paid, not Workers Free, so the preview account needs Workers Paid. New checks: Audit Logs v2 coverage, cross-account environment secrets, Dependabot's SHA bumps.
 
-> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the drift plan is hourly in the body too, and the read-only claim cites ADR 0024. The status App's private key joins the yearly rotation; it had none.
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the drift plan is hourly in the body too, and the read-only claim cites ADR 0024. The status App's private key joins the yearly rotation; it had none. The body also follows ADR 0027 (`exports`, plan summaries with values, the release gate running CI) and ADR 0024 (`production-plan`'s permissions).
 
 # Deliver through reusable workflows called from each ops repo: plan read-only, apply behind at most one approval, and drill restores in a throwaway environment
 
@@ -61,7 +61,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 - **Inputs:**
   - one structured `infra/env` output, `workers`: each Worker's bindings, variables and routes;
   - `deployment.json`;
-  - each Worker's checked-in `wrangler.base.jsonc`: `main`, compatibility settings, Durable Object classes and migrations, and Cron Triggers. In a preview it comes from the pull request, as data: the script copies an allowlist of its fields and fails on any key outside it.
+  - each Worker's checked-in `wrangler.base.jsonc`: `main`, compatibility settings, Durable Object `exports` ([ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md); classes and migrations as first decided), and Cron Triggers. In a preview it comes from the pull request, as data: the script copies an allowlist of its fields and fails on any key outside it.
 - **Output:** `.rendered/<worker>.<env>.jsonc`, with a do-not-edit header.
 - **Guards** fail the run when:
   - a Worker isn't named `<name>`, `<name>-pr-<n>` or `<name>-drill`;
@@ -83,7 +83,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 ### A new `production-plan` environment
 
 - **No approval, `main` only, read-only credentials:**
-  - a Cloudflare token with Workers Scripts, KV, D1, DNS and zone Read;
+  - a Cloudflare token with Metadata Read-Only (in place of Workers Scripts Read), KV, D1, R2, DNS and zone Read ([ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md));
   - a read-only R2 key on the state bucket;
   - the state passphrase.
 - **It plans `infra/zone` and `env/prod` with `-lock=false`** and saves both plans, encrypted with OpenTofu's `plan` encryption.
@@ -98,7 +98,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
    - the apex's Canary link Short URL answers 302 to its Target URL;
    - `status.` answers 200;
    - `api.` answers 401 to a request without a key.
-5. **On a failed smoke test,** `wrangler rollback` returns `redirect` and `status` to their previous versions and the run fails. GitHub's failure email is the alert. `links-data` and OpenTofu are never rolled back automatically: Durable Object migrations block rollback, and data changes go forward only.
+5. **On a failed smoke test,** `wrangler rollback` returns `redirect` and `status` to their previous versions and the run fails. GitHub's failure email is the alert. `links-data` and OpenTofu are never rolled back automatically: `links-data` declares its Durable Objects with `exports`, which rules out Worker versions and so `wrangler rollback` ([ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md)), and data changes go forward only.
 6. **`teardown`** of previews (below).
 
 - `admin` runs before `prod` because `redirect` calls `links-data` and `status` reads D1.
@@ -144,7 +144,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 ### Plans and logs in a public ops repo
 
 - **No plan is printed to the log.**
-  - Each plan job writes a **job summary:** per root, a table of resource addresses and their actions, with replacements and deletions highlighted and no attribute values.
+  - Each plan job writes a **job summary:** per root, a table of resource addresses and their actions, with replacements and deletions highlighted. For every update, replacement and delete it shows each changed attribute before and after, with sensitive attributes masked ([ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md); no attribute values as first decided).
   - Full plans exist only as encrypted plan artifacts. They are kept for 1 day and deleted by the job that applies them. The runbook shows how to `tofu show` one locally with the passphrase.
 - **Wrangler's output is left as it is:** version IDs and routes.
 - **The ops repo keeps run logs for 30 days.**
@@ -173,7 +173,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 ### Releases and bumps
 
 - **`release.yml` in this repo** is dispatched with a `version`:
-  - it refuses unless `main`'s CI is green;
+  - it runs this repo's CI on the commit it is about to tag, and tags only if it passes ([ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md)); it no longer reads checks left on `main`;
   - it tags `main`'s HEAD;
   - it creates a GitHub Release with generated notes and a hand-written **Upgrading** section for any change to the config or secret contract.
 - **Before 1.0, a breaking change to that contract bumps the minor version.**

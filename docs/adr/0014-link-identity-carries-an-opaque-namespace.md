@@ -6,6 +6,8 @@ status: accepted
 >
 > Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the Redirect event's index is `<Namespace ID>:<source>:<outcome>`, not `<Namespace ID>:<Short code>`. The Short code is a blob, and the `namespace` blob stays.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the Redirect event index line follows ADR 0020.
+
 # Identify every Link by an opaque Namespace plus its Short code, so one deployment can serve many Short domains
 
 [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) makes the shard hash and the `LINKS` key format permanent. As decided there, they held only the Short code, so a deployment had one Short code space forever. The project is headed for open source, embedding, and possibly a SaaS in which customers bring their own Short domains. With one space, one customer's `acme.co/sale` would block every other customer's `/sale`, and adding scoping later would mean moving every Link.
@@ -69,7 +71,7 @@ This encoding is as permanent as ADR 0008's hash, which it replaces.
 
 ### Redirect events
 
-- **The index** is `<Namespace ID>:<Short code>`, the Link's full identity, and what future click analytics would key on.
+- **The index** is `<Namespace ID>:<Short code>`, the Link's full identity, and what future click analytics would key on. ([ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md) changed the index to `<Namespace ID>:<source>:<outcome>`, and per-Link analytics gets its own dataset.)
 - **A new `namespace` blob** makes per-Namespace volume queryable later.
 - **The Status page and the Objectives stay deployment-wide** ([ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md), [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)).
 
