@@ -119,7 +119,7 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 - **Amends ADR 0008:** `links-data` binds and writes `AUTH`; prod's bucket and locks are applied by hand. Three namespaces still stop a bug in one writer from deleting another's keys, but they were never a boundary against a deploy credential.
 - **Amends ADR 0010:** gated methods; the `operator` token and the laptop key; all audit records written by `links-data`; `ops record`; the corrections above.
 - **Amends ADR 0012:** raw SQL through Data Studio is logged in v1. The annual rotation produces a digest email for every rolled token, which is expected.
-- **Amends ADR 0016:** `production-plan`'s permissions, its plan of the bucket configuration, and the expiry check in the weekly job.
+- **Amends ADR 0016:** `production-plan`'s permissions, its plan of the bucket configuration, and the expiry check in the hourly integrity job (the weekly drift job until ADR 0026).
 - **Amends [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md):** `links-data` now binds `AUTH`. Suspension stays in the Creator object and `FLAGS`, so the Operator and the ceiling keep one code path.
 - **Changing a lock or lifecycle rule is hand work** with the broad token.
 - **Every Operator command now waits on a Workflow,** so `keys issue` takes seconds. The few steps each uses are far inside the included 500,000 a month.
