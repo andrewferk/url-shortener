@@ -7,7 +7,7 @@ A service that maps short, memorable URLs to long ones and redirects visitors to
 ### Links
 
 **Link**:
-The stored mapping from a Short code to a Target URL, optionally carrying an Expiry. Its fields never change after creation; the only change a Link ever makes is to become a Deleted link.
+The stored mapping from a Short code to a Target URL, optionally carrying an Expiry. Its fields never change after creation; the only change a Link makes is to become a Deleted link, which only a Void reverses.
 _Avoid_: Short URL (as a name for the record), mapping, entry
 
 **Short code**:
@@ -42,12 +42,16 @@ _Avoid_: TTL, expiration time
 A Link past its Expiry. It answers 410 Gone and its Short code is never reissued.
 
 **Deleted link**:
-A Link its Creator has deleted, or the Operator has taken down. The deletion is permanent: it answers 410 Gone, its Target URL is erased, and its Short code is never reissued.
+A Link its Creator has deleted, or the Operator has taken down. The deletion is permanent unless the Operator voids it: it answers 410 Gone, its Target URL is erased, and its Short code is never reissued.
 _Avoid_: Disabled link, removed link, inactive link
 
 **Takedown**:
 The deletion of a Link by the Operator, or by the service on the Operator's behalf, made for a stated reason. The Link becomes a Deleted link that records the Operator, not its Creator, as the one who deleted it.
 _Avoid_: Ban, block, removal
+
+**Void**:
+The Operator's cancelling of a delete that was forged or was the Operator's own mistake. The Link is live again with every field as it was.
+_Avoid_: Undelete, restore, revive
 
 **Redirect hijack**:
 A Short URL answering with anything other than what its Link says, without the Link having been deleted.

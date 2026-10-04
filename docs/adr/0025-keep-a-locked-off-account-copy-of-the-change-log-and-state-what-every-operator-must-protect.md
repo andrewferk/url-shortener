@@ -4,6 +4,8 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): every object pushed off-account carries its signature as object metadata, and a rebuild verifies it. `offsite/` markers are signed, and an unsigned marker is ignored. The integrity heartbeat goes to Grafana, not `FLAGS`, because the `production` token can write `FLAGS`.
 
+> Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): void records are copied off-account with the dailies and snapshots, and a rebuild copies them back.
+
 # Keep a locked off-account copy of the change log, and state what every Operator must protect: the domain and the identity roots
 
 [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) accepted that "losing the whole prod account, or a compromised Operator token, can lose everything", and deferred the revisit to the first real Creator. Nothing scheduled it. Three things make it worth deciding now:
@@ -35,8 +37,8 @@ Decided in [How does a deployment survive losing its Cloudflare account, its dom
 - **The target is a contract, not a provider:** any S3-compatible bucket outside Cloudflare with Object Lock in compliance mode. Backblaze B2 is the documented reference: its first 10 GB are free, and its compliance lock "cannot be removed by any user".
   - A second Cloudflare account doesn't qualify. Whether a suspension covers one account or all of a person's accounts is not documented.
 - **`deployment.json` gains `offsite_backup`:** either `{ "endpoint", "region", "bucket" }` or the string `"none"`. There is no default, so an Operator states one or the other.
-- **What is copied:** every daily object, every monthly snapshot, and every `auth/` export. Minute objects and `ops/` audit records are not.
-- **`links-data` pushes.** Its compaction Cron Trigger already writes each daily and snapshot. After compaction, the same run copies every daily, snapshot and `auth/` object that has no marker yet:
+- **What is copied:** every daily object, every monthly snapshot, every void record ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)), and every `auth/` export. Minute objects, `ops/` audit records and review files are not.
+- **`links-data` pushes.** Its compaction Cron Trigger already writes each daily and snapshot. After compaction, the same run copies every daily, snapshot, void record and `auth/` object that has no marker yet:
   1. stream the R2 object into one signed `PUT` to the target, under the same key;
   2. on success, write an empty marker object at `offsite/<key>` in the backup bucket.
 
@@ -74,7 +76,7 @@ Decided in [How does a deployment survive losing its Cloudflare account, its dom
 A runbook, `docs/runbooks/rebuild-in-a-fresh-account.md`:
 
 1. Bootstrap a new Cloudflare account and its zone. Point the registrar's nameservers at it and replace the DS record.
-2. Mint a read key on the target. Copy the latest snapshot, the dailies since, and the latest `auth/` export into the new backup bucket, by hand with the broad token.
+2. Mint a read key on the target. Copy the latest snapshot, the dailies since, every void record, and the latest `auth/` export into the new backup bucket, by hand with the broad token.
 3. Deploy, then run ADR 0008's "namespace deleted" restore: replay each shard from the snapshot and dailies, then re-drive `kv` and `creator`.
 4. `restore` `AUTH` from the export. Creators keep their API keys.
 5. Delete the read key. Create new tokens, update the ops repo's secrets and `deployment.json`, and reconfigure the push.
