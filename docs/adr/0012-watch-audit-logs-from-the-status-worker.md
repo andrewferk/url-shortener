@@ -10,6 +10,8 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Logpush of audit logs is no longer Enterprise-only (self-service on Free, 25 GB a month included; the audit dataset on Free is inferred). Data Studio SQL is logged in Audit Logs v1. The digest carries no links, and goes to an alias.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the execution headroom cited against a separate Worker follows ADR 0021. The two mentions of the `operator` token's KV Edit follow ADR 0024.
+
 # Watch Audit Logs v2 from the Status Worker for destructive changes, and email the Operator a digest
 
 Cloudflare sends no alert when a Worker, KV namespace, D1 database, R2 bucket or DNS record is deleted ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). The guards so far protect against *OpenTofu* deleting things:
@@ -19,7 +21,7 @@ Cloudflare sends no alert when a Worker, KV namespace, D1 database, R2 bucket or
 
 They don't stop other credentials that can reach prod:
 - the `preview` token, which holds Workers Admin, KV and D1 in the prod account until the account split;
-- the `operator` token's KV Edit ([ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md));
+- the `operator` token ([ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md)), which held KV Edit when this was decided; ADR 0024 dropped it, and the token can still deploy `links-data`;
 - the Operator's broad token and dashboard session.
 
 [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)'s alerts already catch the deletions that break Redirects. What nothing catches is the silent kind: removing the backup bucket's lock rules, minting a token, or a preview credential touching prod. So the Status Worker polls Audit Logs v2 every 5 minutes and emails the Operator a digest of destructive changes.
@@ -129,11 +131,11 @@ $0 extra.
 
 ## Considered options
 
-- **Leave the audit log unwatched,** relying on `prevent_destroy`, approval gates and tokens that can't delete. Those guards don't cover the `preview` token in the single-account phase, the `operator` token's KV Edit, or the Operator's own token and session.
+- **Leave the audit log unwatched,** relying on `prevent_destroy`, approval gates and tokens that can't delete. Those guards don't cover the `preview` token in the single-account phase, the `operator` token (KV Edit then; Editor on `links-data` still, since ADR 0024), or the Operator's own token and session.
 - **Report every event, or drop all events from CI and Operator tokens.** The first makes preview teardowns noise. The second hides a stolen CI or Operator token, which is exactly the case worth an email.
 - **Match preview resources by their `pr-<n>` name.** Delete events usually carry an ID, not a name.
 - **Watch rulesets, routes and zone settings too.** They change on every merge, and a bad change already shows up as failing Probes.
-- **A new Worker with no routes and its own Cron Trigger.** It would need its own `send_email`, its own state, and its own external watchdog, which Grafana's roughly 6k of monthly execution headroom can barely afford.
+- **A new Worker with no routes and its own Cron Trigger.** It would need its own `send_email`, its own state, and its own external watchdog, which Grafana's roughly 6k of monthly execution headroom could barely afford (about 24k since ADR 0021).
 - **A scheduled GitHub Actions job.** GitHub's cron runs late and can be dropped, and the job would put another Cloudflare credential in GitHub.
 - **Cloudflare Notifications or Logpush.** No Notification type covers audit events. Logpush is no longer Enterprise-only: it is self-service on Free, with 25 GB a month included. That the `audit_logs_v2` dataset can be selected on a Free account is inferred, not stated. [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md) decides it still isn't used.
 - **Adding Account Settings Read to the Analytics Engine read token.** Previews reuse that token, so every preview would hold it.

@@ -4,6 +4,8 @@ status: accepted
 
 > Amended by [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md): in the single-account phase the hourly integrity job also lists preview Workers and fails when one has no active deployment record.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the signing key's rotation gets a trigger, by event. The findings email is tied to ADR 0011's no-links rule.
+
 # Detect Redirect hijacks from `links-data` and the ops repo: sweep `LINKS` against the shards, sign the change log, and compare the live zone and Workers with `main` every hour
 
 Rewriting where Short URLs go is the highest-value attack on a shortener, and nothing in the design would notice it. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) says the unattended `production` token can answer Visitors anything and rewrite `LINKS`, and that recovery "depends on someone noticing within the window". [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)'s watch covers resources, not data, and skips Worker deploys, routes and Email Routing.
@@ -43,7 +45,7 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
   - **Compaction and restores skip an object that is unsigned or wrongly signed,** and alert. This closes what the invariant can't: a forged *delete*, which wins the merge, and a forged new Link.
   - **An unsigned `offsite/` marker is ignored,** so a forged marker can't stop an object being copied off-account.
   - **The signature travels with the object to the off-account copy,** as object metadata on the `PUT`, and a rebuild in a fresh account verifies it.
-  - Rotation adds a key under a new ID; old keys stay for verifying. A restore without the key needs an explicit override, recorded in its audit record.
+  - Rotation adds a key under a new ID; old keys stay for verifying. It is by event, not by calendar, like the state passphrase (ADR 0027): the Operator rotates on a suspected exposure of the key, which includes any `links-data` deploy they don't trust, since the Worker can read its own secrets. A restore without the key needs an explicit override, recorded in its audit record.
 
 ### Deletes are counted
 
@@ -66,7 +68,7 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 
 ### Alerts and the heartbeat
 
-- **`links-data` emails the Operator itself,** through its own `send_email` binding restricted to the Operator's verified address. One email per finding kind per run, with the Short URLs or object keys involved.
+- **`links-data` emails the Operator itself,** through its own `send_email` binding restricted to the Operator's verified address. One email per finding kind per run, with the Short URLs or object keys involved. They are identifiers to look up, not links to follow: no email a Worker sends carries a link ([ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)).
 - **After each hourly run `links-data` pushes a heartbeat to Grafana:** the time of the run and its count of findings, over Grafana Cloud's HTTPS push endpoint with a write token held as a Worker secret.
 - **A fourth Grafana rule we own, "Integrity checks stale or failing",** joins [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)'s three. It fires when no heartbeat has arrived for three hours or the last one reports findings. It also answers ADR 0008's "compaction must be monitored".
 - **Prod only,** following `probes_enabled`.

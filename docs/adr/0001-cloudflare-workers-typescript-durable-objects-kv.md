@@ -8,6 +8,8 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the 1,000 req/s soft limit is cited beside Cloudflare's 200–500 req/s guidance for storage writes, and the 256-shard arithmetic holds against the lower figure. Durable Object calls use RPC methods.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the topology line follows ADR 0017: there is a region to choose.
+
 # Build on Cloudflare Workers in TypeScript, with sharded Durable Objects as the Link source of truth and KV as the Redirect read copy
 
 The service must run for ≤ $20/mo today without anything capping out below 100M DAU / 1B Links, keep Short codes guaranteed unique, and put a CDN and firewall in front of Redirects. We build it edge-native on Cloudflare: a single global TypeScript Worker, sharded Durable Objects (SQLite) as the only strongly consistent write path, and Workers KV as the eventually consistent copy that Redirects read. It is the only single-provider stack that fits the budget with CDN, WAF and DDoS protection included, and its peak cost (≈$11–25k/mo at list) is the lowest of the single-provider options because the zone CDN and WAF carry no per-request fee.
@@ -16,7 +18,7 @@ Decided in [Which provider, runtime topology, and language do we build on?](http
 
 ## Decision
 
-- **Topology:** edge-native, one global Worker deployment on Workers Paid ($5/mo). There are no regions to choose. The zone stays on Cloudflare's Free plan.
+- **Topology:** edge-native, one global Worker deployment on Workers Paid ($5/mo). There is one region to choose, for the Durable Objects, and two optional ones ([ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md)). The zone stays on Cloudflare's Free plan.
 - **Language:** TypeScript (strict). Warm Redirect latency is datastore-bound and equal across languages; on Workers, TypeScript is native while Rust and Go run as Wasm with larger bundles and rougher bindings. A hot path can later move to a Rust Wasm module without a rewrite.
 - **Source of truth:** 256 Durable Object shards with SQLite storage, each Link placed by a stable hash of its Short code. A shard performs the atomic claim that makes Short codes unique (generated codes and Custom aliases alike) and keeps permanent tombstones so no Short code is ever reissued. The shard count is fixed from day one: it gives ≈2 GB per shard at 1B Links (the limit is 10 GB) and ≈256k req/s of fallback reads at the 1k req/s-per-object soft limit. That soft limit is still documented. Cloudflare's newer guidance puts one object at about 500–1,000 req/s for simple operations and about 200–500 req/s when each request writes to storage. Creates are storage writes, so 256 shards take about 51k–128k creates a second. Peak needs far less: 1B Links created within a single month would be about 400 a second.
 - **Redirect read path:** Workers KV. After committing, a shard writes the Link to KV through an outbox retried by an alarm. On a KV miss, the Worker falls back to the owning shard, so a new Link never answers not-found to its first Visitors, even while KV is still propagating (~60 s) or has cached a negative lookup. A Deleted link may keep redirecting for up to about 1–2 minutes while KV and edge caches catch up.

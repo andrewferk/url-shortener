@@ -24,6 +24,10 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the Creator ID `c` stays in `LINKS` values for good, since per-Creator analytics would need it. Without `WITHOUT ROWID`, a plain `TEXT PRIMARY KEY` would roughly double billed row writes (an inference, measured in slice 1.3). Editor on one Worker can bind any KV, R2 or D1 resource, as a documented fact. Durable Object calls use RPC methods.
 
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): the cost brake's flag is `brake:<utc-hour>`, not `brake:<utc-date>`, and it stops applying at the top of the hour.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the namespace table follows ADR 0022's `brake:<utc-hour>` and ADR 0024's `AUTH` writer and binding. The shard hash input, the Deleted link's Target URL and the "can lose everything" consequence follow ADRs 0014, 0018, 0019 and 0025.
+
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) put every Link in one of 256 SQLite Durable Object shards, projected into Workers KV for Redirects and into one Durable Object per Creator for listing. This ADR fixes the shapes those three copies take and how they're kept recoverable.
@@ -40,7 +44,7 @@ Decided in [What is the Link data model across shards, KV, and Creator lists?](h
 
 ### Shard placement
 
-- **The shard number** is the first byte of SHA-256 over the Short code's UTF-8 bytes, 0–255. The hash is unkeyed and takes the exact, case-sensitive Short code.
+- **The shard number** is the first byte of SHA-256 over the UTF-8 bytes of `<Namespace ID>:<fold(Short code)>`, 0–255: the Namespace ([ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md)) and the case-folded Short code ([ADR 0018](./0018-hash-the-case-folded-short-code-keep-aliases-case-sensitive-reserve-case-insensitive-mode.md)). The hash is unkeyed. Rows, keys and log entries still hold the exact, case-sensitive Short code.
   - Custom aliases aren't random, so the Short code's own characters would cluster them onto a few shards.
   - A keyed hash would stop a Creator grinding aliases onto one shard, but it would bring back the permanent secret ADR 0002 rejected. Creator limits and the 10 GB shard ceiling already bound grinding.
 - **The domain core owns the hash,** pinned by test vectors, so any future adapter reproduces it exactly.
@@ -62,7 +66,7 @@ CREATE TABLE links (
 ```
 
 - **The row is the tombstone.** A claim is `INSERT … ON CONFLICT DO NOTHING`, and deleting a Link only sets `deleted_at`, so the row stays forever and blocks any later claim. There's no separate tombstone table.
-- **A Deleted link keeps its Target URL in the shard,** as the record of what was taken down. The KV copy drops it (below).
+- **A Deleted link does not keep its Target URL** ([ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md)): the delete sets `target_url` to the empty string and fills `target_url_sha256`. As first decided here, the shard kept it as the record of what was taken down. The KV copy drops it (below).
 - **Expired links aren't marked.** Expiry is derived from `expires_at` whenever it's read.
 - **`deleted_by`** separates a Creator's delete from an Operator's takedown. A Creator may delete only rows carrying its own `creator_id`.
 - **No secondary indexes.** Every shard lookup is by Short code, and each index would add billed row writes.
@@ -102,11 +106,11 @@ CREATE TABLE outbox (
   | Namespace | Holds | Written by | Read by |
   |---|---|---|---|
   | `LINKS` | One value per Link | `links-data` (the outbox) | `redirect` |
-  | `AUTH` | [ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)'s `cred:<sha256>` and `creator:<id>` | The Operator CLI only | `redirect` |
-  | `FLAGS` | [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s `brake:<utc-date>` and `cap:<creatorId>:<utc-date>` | `redirect` (the brake), `links-data` (the daily cap) | `redirect` |
+  | `AUTH` | [ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)'s `cred:<sha256>` and `creator:<id>` | `links-data`, in the Operator's Workflows ([ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md)); the Operator CLI only, as first decided | `redirect` |
+  | `FLAGS` | [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s `brake:<utc-hour>` ([ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md)) and `cap:<creatorId>:<utc-date>` | `redirect` (the brake), `links-data` (the daily cap) | `redirect` |
 
-  - `links-data` never binds `AUTH`.
-  - Flag keys carry their UTC date, so "until midnight UTC" needs no cleanup. KV's native `expiration` garbage-collects these small keys.
+  - `links-data` binds `AUTH` to write it (ADR 0024). As first decided, it never bound `AUTH`.
+  - Flag keys carry their UTC date, or their UTC hour for the brake, so "until midnight UTC" needs no cleanup. KV's native `expiration` garbage-collects these small keys.
 - **`LINKS` keys are `<shard as 2 lowercase hex digits>:<Short code>`,** e.g. `07:Ab3xYz9`.
   - Listing one shard's keys is then a prefix list: about 4k list calls at peak instead of 1M. That's what makes a single-shard reconcile (below) affordable.
   - The Redirect Worker needs the shard number for its fallback anyway. Hashing before every read costs microseconds and no I/O.
@@ -250,7 +254,7 @@ This stays inside ADR 0001's ≈$11–25k/mo peak range.
 ## Consequences
 
 - **The shard hash, the object names and the `LINKS` key format are permanent.**
-- **Losing the whole prod account, or a compromised Operator token, can lose everything,** because the bucket lock can be removed by anyone with R2 write. This is an accepted risk for now. It is revisited at ADR 0007's trigger, the first real Creator, when the preview account split happens anyway.
+- **Losing the whole prod account, or a compromised Operator token, can lose everything,** because the bucket lock can be removed by anyone with R2 write. This is an accepted risk for now. It is revisited at ADR 0007's trigger, the first real Creator, when the preview account split happens anyway. [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md) reversed this: with the off-account copy, losing the prod account or every in-account backup no longer loses everything.
 - **If `links-data` and `LINKS` are lost together,** only changes not yet in the log are gone: about the last minute. Nothing records those Short codes, so they could be reissued. That's the one case where ADR 0002's guarantee doesn't hold.
 - **Compaction must be monitored.** It never loses data, because objects are retired only once covered. But while it's stuck, minute objects pile up and recovery gets slower.
 - **A shard rebuilt from `LINKS` loses deletion details.** A tombstone in KV says a Link was deleted, but not when or by whom.

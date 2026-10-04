@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-> Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): `cred:` and `creator:` records live in their own `AUTH` KV namespace, which `links-data` never binds. The Operator CLI gains `backup` and `restore`, and exports `AUTH` to the backup bucket after every write.
+> Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): `cred:` and `creator:` records live in their own `AUTH` KV namespace, which `links-data` never binds (reversed by ADR 0024, below). The Operator CLI gains `backup` and `restore`, and exports `AUTH` to the backup bucket after every write.
 >
 > Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): the Operator CLI uses a dedicated `operator` token and a bucket-scoped R2 key, not the Operator's broad token, and every command writes an audit record under `ops/`. `creators remove --delete-links` first marks the Creator removed, then sets a permanent `removed_with_links` flag on the Creator object, so Links that reach its list late are taken down on arrival, then walks the list.
 >
@@ -15,6 +15,8 @@ status: accepted
 > Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): every Operator CLI command that writes `AUTH` is a Workflow in `links-data`, which now binds `AUTH`. The CLI generates an API key locally and sends only its hash, and holds no KV Edit. The broad token may write `AUTH` directly only as break-glass.
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): `cacheTtl` is 30 s on `AUTH` reads, so revocation takes about 30 s, not about a minute. OIDC verification pins `alg` to RS256, checks `exp` and `nbf`, caches the JWKS, and the trust rule gains `job_workflow_ref`.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): "API keys and OIDC tokens are never logged" is stated here; it was a rule only in the PRD.
 
 # Creators authenticate with Operator-issued API keys checked through KV, and CI with GitHub OIDC
 
@@ -33,6 +35,7 @@ Decided in [How do Creators authenticate?](https://github.com/andrewferk/url-sho
   - Only SHA-256 of the full key is stored. A 256-bit random secret needs no salt and no slow hash.
   - A Creator holds at most **2 active keys**, so rotation can overlap: issue a new key, switch over, revoke the old one.
   - Keys don't expire. They are rotated when they may have leaked, or when a person leaves.
+  - **API keys and OIDC tokens are never logged.** No Worker log line, Redirect event, audit record, Workflow parameter or CI log holds one. An API key appears in logs only as its key ID.
 - **Where credentials live:** KV is the store of record.
   - `cred:<sha256>` → Creator ID and key ID; `creator:<id>` → status and active key IDs.
   - The Worker only reads these records, behind a `CreatorAuthenticator` port.

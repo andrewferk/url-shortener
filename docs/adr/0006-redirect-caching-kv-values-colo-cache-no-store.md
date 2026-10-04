@@ -7,10 +7,14 @@ status: accepted
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): `LINKS` keys, and so the per-colo cache key, are `<shard hex>:<Namespace ID>:<Short code>`.
 >
 > Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): a Link's Target URL and Expiry are immutable as a chosen property of the service, not because the caches lack invalidation. The delete bound, about 60 s, is unchanged.
+
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): the cost brake that bounds shard traffic resets every UTC hour, not every day.
 >
 > Amended in place by [Does the delete bound drop now that `cacheTtl` can be 30 s?](https://github.com/andrewferk/url-shortener/issues/59): KV's `cacheTtl` minimum fell from 60 s to 30 s on 2026-01-30, so `cacheTtl` is 30 s and the delete bound is about 60 s, not 90 s. "Cached KV reads are billed" is restated as an assumption, with a spike to measure it and a rule for the per-colo cache if it proves false.
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): ADR 0019's note above says the delete bound is about 60 s, not 90 s.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's "daily cost brake" and its reason for immutability follow ADRs 0022 and 0019.
 
 # Cache Redirects only inside the Worker: a 30 s per-colo cache in front of a 30 s KV cache, `no-store` to browsers, and no purge
 
@@ -31,7 +35,7 @@ Decided in [How are Redirects cached at the edge?](https://github.com/andrewferk
   - KV misses and shard-confirmed not-founds are never stored, so a newly claimed Short code is never hidden by a cached not-found.
   - The stored entry is separate from the response sent to the Visitor. The Worker still runs, and still emits a Redirect event, on every request.
 - **`Cache-Control: no-store` on every Redirect Worker response:** 302, 404, 410, and ADR 0004's 429 and 503. A browser never replays a Redirect without the Worker seeing it.
-- **No negative caching** beyond what KV does on its own. KV's cached misses don't reduce shard traffic, because every KV miss falls back to the shard anyway. [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s shard-fallback limit and daily cost brake bound that traffic.
+- **No negative caching** beyond what KV does on its own. KV's cached misses don't reduce shard traffic, because every KV miss falls back to the shard anyway. [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s shard-fallback limit and cost brake (hourly since ADR 0022) bound that traffic.
 - **No purge on delete.** KV can't be purged, and the Cache API purges only one colo at a time from inside a Worker. A Deleted link stops redirecting once its tombstone has passed through both caches. The worst case is about **60 s** after the outbox writes it (30 s colo + 30 s KV), inside ADR 0001's "about 1–2 minutes". It is "about" because Cloudflare documents no hard upper bound on how long a KV location can serve a stale value.
 - **Redirect events:** the outcomes in ADR 0003 gain `colo-hit`, a 302 served from the per-colo cache. `kv-hit` now means the colo cache missed and KV answered.
 
@@ -66,6 +70,6 @@ Nothing before the per-colo cache's slice waits on the spike.
 ## Consequences
 
 - **A Deleted link can keep redirecting for about 60 s,** and its Redirect events show 302s during that window. There is no faster takedown lever for a single Short code: ADR 0004's emergency block works by IP, country or ASN.
-- **Changing a Link's Target URL or Expiry is off the table,** not just unimplemented. Either change would need a cache-invalidation story this design doesn't have.
+- **Changing a Link's Target URL or Expiry is off the table,** not just unimplemented. As first decided here, the reason was that either change would need a cache-invalidation story this design doesn't have. [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md) made immutability a chosen property of a Link, not a consequence of the caches.
 - **Tombstones stay in KV forever,** one per Deleted link, inside ADR 0001's KV storage estimate.
 - **ADR 0001's peak cost relies on the per-colo cache** for as long as cached reads are assumed billed. Removing it then roughly adds $13.5k/mo at peak.

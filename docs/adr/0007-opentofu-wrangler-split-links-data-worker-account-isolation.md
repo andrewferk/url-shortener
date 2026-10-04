@@ -4,9 +4,9 @@ status: accepted
 
 > Amended by [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md): `infra/env` also owns an R2 backup bucket bound to `links-data`, with a bucket lock and `prevent_destroy` in prod only. So `production-admin` also needs R2 edit.
 >
-> Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): `infra/bootstrap` also creates the Operator CLI's `operator` token (Editor on `links-data`, Workers Scripts Read, KV Edit) and an R2 key scoped to the backup bucket. `links-data` also holds the Operator Workflows, and sets `workers_dev = false` and `preview_urls = false`, which the render script enforces.
+> Amended by [ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md): `infra/bootstrap` also creates the Operator CLI's `operator` token (Editor on `links-data`, Workers Scripts Read, KV Edit) and an R2 key scoped to the backup bucket. ADR 0024 later dropped KV Edit and made the R2 key Object Read only. `links-data` also holds the Operator Workflows, and sets `workers_dev = false` and `preview_urls = false`, which the render script enforces.
 >
-> Amended by [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md): `infra/zone` also owns Email Routing and the Operator's verified destination address, so the `production` token gains Email Routing permissions. When `probes_enabled`, `infra/env` also owns the Grafana contact point, notification policy and check alerts, plus a Status page check that brings prod to about 93.7k of Grafana Free's 100k monthly executions. The Status Worker gains a `send_email` binding.
+> Amended by [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md): `infra/zone` also owns Email Routing and the Operator's verified destination address, so the `production` token gains Email Routing permissions. When `probes_enabled`, `infra/env` also owns the Grafana contact point, notification policy and check alerts, plus a Status page check that brings prod to about 93.7k of Grafana Free's 100k monthly executions (about 75.9k since ADR 0021). The Status Worker gains a `send_email` binding.
 >
 > Amended by [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md): `infra/bootstrap` also creates an `audit-read` token (Account Settings Read only), pushed only to prod's Status Worker. `infra/env` outputs the protected set of prod resource and token IDs for the render script. The consequence that Cloudflare sends no alert on deletion is answered: the Status Worker polls Audit Logs v2 and emails the Operator.
 >
@@ -17,6 +17,10 @@ status: accepted
 > Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): the D1 database and every R2 bucket, the state buckets included, are created with the deployment's optional `location_hints.d1` and `location_hints.r2`. A hint can't change once applied.
 >
 > Amended by [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md): `infra/bootstrap` holds one OpenTofu configuration, applied by hand, that installs Grafana Synthetic Monitoring; its state has its own key and a passphrase only the Operator holds, and is the one state that deliberately holds a secret. `infra/env` owns a Grafana rule group in place of the per-check alerts, and takes `probe_frequency_seconds`, `probe_locations` and `status_check_locations`.
+
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): `infra/env` takes `flood_alert_requests_per_second` (default 100), and the cost brake applies one twenty-fourth of `cost_brake_daily_threshold` per UTC hour.
+
+> Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): `infra/env` takes `creator_daily_link_ceiling` (default 600) and `abuse_response_hours` (default 24). The Status Worker binds `FLAGS`, and `infra/zone` owns the `abuse@` Email Routing rule.
 >
 > Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): "nothing that runs unattended in prod can delete anything" is replaced by a recoverability claim and a table of what each credential can do to Link data. Prod's backup bucket and its locks move to a hand-applied configuration in `infra/bootstrap`, so `production-admin` loses R2 edit and `production-plan` gains R2 read. Each `links-data` deploy pushes a fresh `OPERATOR_GATE` secret. Every token expires after 13 months, is rotated yearly and uses the narrowest Workers role.
 >
@@ -26,13 +30,17 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Worker Previews are rejected for service bindings, Workflows and `script_name` Durable Objects not being per-Preview; shared KV and D1 applies only when bound to the same ID. The spend alert leaves OpenTofu. Editor on one Worker can bind any KV, R2 or D1 resource. All three Workers set `workers_dev` and `preview_urls` to `false`. Every ruleset rule carries a `ref`; the `production` token holds Bot Management Write; `.terraform.lock.hcl` is committed. Routes instead of Custom Domains, and the single-account phase, are cited as deliberate deviations; the orphaned-DNS reason is dropped. A preview account that runs drills needs Workers Paid.
 
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `links-data` gains an hourly Cron Trigger, its own `send_email` binding and two secrets set by hand, the backup signing key and a Grafana write token. Every deploy run records the live version IDs of all three Workers in a GitHub deployment record, which the ops repo's hourly integrity job compares with what is live.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body now carries what ADRs 0010, 0011, 0016, 0021, 0024, 0026 and 0027 changed: the recoverability claim, `exports`, OpenTofu 1.13.x, the Probe count, and the credentials table, which gains `production-plan`. The parameters table gains the inputs of ADRs 0022 and 0023, the `status` row lists its later bindings, and Synthetic Monitoring is installed by OpenTofu (ADR 0021).
+
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 
 Cloudflare has no lock, trash or restore for a deleted Worker, KV namespace, D1 database or Durable Object namespace. Deleting a Worker also deletes the Durable Object namespaces it implements, so under [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)'s single Worker, one wrong delete loses every Link and tombstone. So the layout is designed around what each credential *can* destroy.
 
 - **Wrangler** deploys the Workers, and **OpenTofu** owns what's stateful or zone-wide.
 - The Durable Objects move into their own **Links data Worker**, which only an approval-gated job deploys.
-- Nothing that runs unattended in prod can delete anything.
+- Nothing that runs unattended in prod can delete a resource. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) restates this as a recoverability claim: an unattended credential can still delete Links and corrupt the read copies through the Workers it deploys, and all of that is recoverable.
 - Previews will get their own Cloudflare account, as Cloudflare recommends. Until the first real Creator is admitted, they share the prod account behind guards.
 
 Decided in [How is the OpenTofu stack laid out and deployed?](https://github.com/andrewferk/url-shortener/issues/13).
@@ -47,11 +55,11 @@ There are three Workers per environment. In prod each is named as below; in a pr
 |---|---|---|
 | `redirect` | Redirects on the short domain, and the Link API on `api.` | ADR 0004's cost-brake Cron Trigger. No Durable Object classes. |
 | `links-data` | No routes | The shard and Creator Durable Object classes and their outbox. `redirect` binds to them with `script_name`. |
-| `status` | The Status page on `status.` ([ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md)) | Its D1 binding and rollup Cron Trigger |
+| `status` | The Status page on `status.` ([ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md)) | Its D1 database, its `FLAGS` binding ([ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md)), its `send_email` binding ([ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)), its read tokens, and the rollup Cron Trigger |
 
 Moving the classes out of `redirect` changes no latency: a call to a Durable Object is a network hop either way. It also brings in two Cloudflare guards:
 - a non-forced delete of `links-data` is refused while `redirect` binds to it;
-- so is a `deleted_classes` migration of its classes.
+- so is removing its classes. This guard is documented for `exports`, which [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md) adopts; the restore drill asserts the first one.
 
 ### Which tool owns what
 
@@ -64,7 +72,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   The spend alert is not in this list: no API or provider resource exists for a budget alert, so it is set by hand (ADR 0004).
 
   It uses the `cloudflare/cloudflare` provider (pinned exactly, per ADR 0001) and `grafana/grafana`.
-- **Wrangler** owns each Worker: code, bindings, Durable Object migrations, Cron Triggers, routes, secrets and D1 schema migrations (`wrangler d1 migrations apply`).
+- **Wrangler** owns each Worker: code, bindings, Durable Object class declarations (`exports`, ADR 0027), Cron Triggers, routes, secrets and D1 schema migrations (`wrangler d1 migrations apply`).
 - **The glue:** a repo script renders each Worker's Wrangler config from `tofu output -json` for the environment. The rendered config holds:
   - resource IDs;
   - routes;
@@ -79,7 +87,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - in CI, Wrangler silently takes over a hostname already attached to another Worker. The provider review reported this; research did not verify it.
 
   An earlier reason, that `wrangler delete` can leave orphaned DNS records behind, is dropped: no source for it was found.
-- **Durable Objects use tagged `migrations`.** Cloudflare calls it legacy, but it isn't deprecated, and gradual deploys work with it when no migration is pending. Moving to the newer `exports` stays possible later; moving back from `exports` is not, and its docs and code still disagree.
+- **Durable Objects are declared with `exports`** (ADR 0027), from the first `links-data` deploy. This ADR first chose tagged `migrations`, which Cloudflare now steers new Workers away from. The switch is one-way, so it is made before anything is deployed.
 - **All three Workers set `workers_dev = false` and `preview_urls = false`,** and the render script enforces both. `preview_urls` is set explicitly because `workers_dev = false` does not disable Version or Preview URLs, and an omitted `preview_urls` leaves the stored setting alone.
 - **Secrets never go through OpenTofu,** so none are in state. CI pushes them with `wrangler secret bulk`.
 
@@ -89,7 +97,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - the state buckets and their bucket-scoped R2 keys;
   - the Cloudflare API tokens;
   - creating each Worker once (only product-level Admin can create a Worker);
-  - the Grafana stack, with Synthetic Monitoring switched on in the UI (the installation can't be imported);
+  - the Grafana stack, with Synthetic Monitoring installed by a hand-applied OpenTofu configuration that lives here ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)), not switched on in the UI;
   - the Status Worker's two read tokens.
 - **`infra/zone`:** one state per Cloudflare account, holding everything that exists once per zone or account:
   - zone settings and all rulesets;
@@ -108,7 +116,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
 - **State backend:**
   - OpenTofu's S3 backend on R2, with Cloudflare's documented R2 flags and `use_lockfile` locking. R2 supports the conditional writes that locking needs.
   - Each root commits its `.terraform.lock.hcl`, so provider binaries are hash-checked, and CI runs `tofu init -lockfile=readonly`.
-  - OpenTofu is pinned to 1.12.x (`use_lockfile` needs ≥1.10).
+  - OpenTofu is pinned to 1.13.x (ADR 0027; `use_lockfile` needs ≥1.10).
   - There is one bucket per account (`tofu-state-prod`, and `tofu-state-preview` for previews), each reachable only with its own bucket-scoped R2 key.
 - **State encryption:** OpenTofu's native `aes_gcm` with a `pbkdf2` passphrase, one per bucket.
   - The passphrase is kept in the GitHub environment secrets *and* the Operator's password manager, because GitHub secrets are write-only and a lost passphrase is lost state.
@@ -125,7 +133,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - its own KV (as ADR 0005 requires) and D1;
   - its own Analytics Engine dataset, `redirect_events_<env>`;
   - a Canary link, created by the post-deploy step in ADR 0003.
-- **Previews get no Probes.** Prod's two locations a minute already use about 86k of Grafana Free's 100k monthly executions. A preview's Status page shows the uptime section as "no Probes in this environment".
+- **Previews get no Probes.** Prod's three locations every 2 minutes, with the Status page check, already use about 75.9k of Grafana Free's 100k monthly executions ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)). A preview's Status page shows the uptime section as "no Probes in this environment".
 - **Teardown order:**
   1. `wrangler delete` for `redirect-pr-<n>` and `status-pr-<n>`.
   2. `wrangler delete` for `links-data-pr-<n>`, which is refused while anything still binds to it.
@@ -148,13 +156,16 @@ These are variables of `infra/env`. They reach the Workers through the rendered 
 | `cost_brake_daily_threshold` (ADR 0004; ADR 0022 applies one twenty-fourth of it per UTC hour) | 3M (125,000 an hour) | **100k** (about 4,167 an hour) |
 | `force_shedding` (ADR 0004) | false | false |
 | `creator_burst_per_minute`, `creator_daily_link_cap` (ADR 0004) | 60, 300 | 60, 300 |
+| `creator_daily_link_ceiling` (ADR 0023) | 600 | 600 |
+| `flood_alert_requests_per_second` (ADR 0022; the alert is sent in prod only) | 100 | 100 |
+| `abuse_response_hours` (ADR 0023) | 24 | 24 |
 | `probes_enabled` | true | false |
 | OIDC trust ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)): `repository_id`, `environment` claim, `aud` | `production`, the `api.` origin | `preview`, the `pr-<n>-api` origin |
 | Rate limiter namespace IDs | a fixed block | derived from `<n>`, disjoint from every other environment |
 
 Rate limiter counters are shared by every Worker in an account that uses the same `namespace_id`. So each environment's IDs are output by `infra/env` and never written by hand.
 
-`force_shedding` is now a Worker variable that the Worker ORs with the cost brake's KV flag. That amends ADR 0004, where OpenTofu wrote the flag, and it means no unattended job needs KV write, which on Cloudflare also grants delete.
+`force_shedding` is now a Worker variable that the Worker ORs with the cost brake's KV flag. That amends ADR 0004, where OpenTofu wrote the flag, and it means no unattended job's token needs KV write, which on Cloudflare also grants delete. The Workers that token deploys still bind KV read-write (ADR 0024).
 
 ### Credentials
 
@@ -162,12 +173,13 @@ Each set of credentials is kept in a separate GitHub environment. Cloudflare API
 
 | GitHub environment | Runs | Cloudflare token can | Approval |
 |---|---|---|---|
-| `production` (from `main` only) | Deploys `redirect` and `status`, applies `infra/zone`, and creates the Canary link (OIDC `environment=production`) | Edit `redirect` and `status` only. Workers Routes, rulesets, zone settings, and Bot Management Write so it can turn Bot Fight Mode off. **No KV, D1 or Workers Admin**, so it can't delete a Worker or any data through the API. | None |
-| `production-admin` (from `main` only) | Applies `env/prod`, deploys `links-data` and runs D1 schema migrations | Edit `links-data`. KV, D1, DNS. The Grafana SM access token. | The Operator approves each run |
+| `production` (from `main` only) | Deploys `redirect` and `status`, applies `infra/zone`, and creates the Canary link (OIDC `environment=production`) | Edit `redirect` and `status` only. Workers Routes, rulesets, zone settings, Email Routing (ADR 0011), and Bot Management Write so it can turn Bot Fight Mode off. **No KV, D1 or Workers Admin**, so it can't delete a Worker or any data through the API. | None |
+| `production-admin` (from `main` only) | Applies `env/prod`, deploys `links-data` and runs D1 schema migrations | Edit `links-data`. KV, D1, DNS; no R2 edit (ADR 0024). The Grafana Synthetic Monitoring token and stack token (ADRs 0016, 0021), and the Grafana write token that `links-data` holds for its heartbeat (ADR 0026). | The Operator approves each run |
+| `production-plan` (from `main` only; [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md)) | Plans `infra/zone` and `env/prod`, and runs the hourly integrity job (ADR 0026) | Read only: Metadata Read-Only on Workers, and R2 read (ADR 0024). | None |
 | `preview` | Applies `env/pr-<n>`, deploys and tears down previews | Workers Admin, KV, D1, DNS and Workers Routes in the account the previews live in. No rulesets or zone settings. | The Operator approves each run (single-account phase) |
 
 - **A token's permissions don't bound what its Worker can bind.** Cloudflare documents that Editor on one Worker is enough to deploy it with bindings to any KV, R2 or D1 resource: "You do not need separate permissions on the bound resources to deploy the Worker." So "No KV, D1" above describes the token's own API calls, not the data its Worker can reach. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) restates the claim on that basis.
-- **The Operator's own broad token** stays in their password manager for bootstrap and emergencies. It is also what ADR 0005's Operator CLI uses.
+- **The Operator's own broad token** stays in their password manager for bootstrap and emergencies. The Operator CLI doesn't use it: it has its own `operator` token ([ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md), ADR 0024).
 - **The Status Worker's read tokens** are created once by hand and pushed as Worker secrets from GitHub environment secrets. They are an Account Analytics Read token for the Analytics Engine SQL API and a Grafana `metrics:read` access policy token. No CI credential can create credentials: OpenTofu doesn't mint tokens, which would need token-creation rights and would put the values in state.
 - **Previews reuse the Analytics Engine read token**, because each reads only its own dataset. They get no Grafana token.
 - **ADR 0005's GitHub OIDC is unaffected.** It proves CI's identity to the Link API. Cloudflare's own API has no OIDC login, so the deploy tokens above stay long-lived secrets.
@@ -223,7 +235,7 @@ Each set of credentials is kept in a separate GitHub environment. Cloudflare API
 ## Consequences
 
 - **ADR 0001's "single global Worker" becomes `redirect` plus `links-data`.** Changes to the shard or Creator Durable Objects ship only through the approval-gated `production-admin` job.
-- **Deleting prod data needs the Operator's own token,** except through the `preview` token during the single-account phase. Nothing Cloudflare offers can undo a deletion. How Links and credentials are backed up belongs to [What is the Link data model across shards, KV, and Creator lists?](https://github.com/andrewferk/url-shortener/issues/14).
+- **Deleting prod data needs the Operator's own token,** except through the `preview` token during the single-account phase. ADR 0024 narrows this to resources, locks and backups: an unattended credential can delete Links, recoverably. Nothing Cloudflare offers can undo a deletion. How Links and credentials are backed up belongs to [What is the Link data model across shards, KV, and Creator lists?](https://github.com/andrewferk/url-shortener/issues/14).
 - **Ruleset and zone-setting changes can't be previewed until the split.** They are checked only by `tofu plan` in the PR.
 - **Cloudflare sends no alert when something is deleted.** Audit Logs v2 records deletions for 18 months, but only through its API.
 - **Two tools, one generated seam.** Adding a binding means adding an OpenTofu output and a line to the render script, never editing a Wrangler config by hand.

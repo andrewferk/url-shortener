@@ -14,6 +14,8 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the render script requires `workers_dev` and `preview_urls` to be `false` on all three Workers, and allowlists fields from a pull request's `wrangler.base.jsonc`. A hardening section adds the committed lock file, SHA-pinned actions, `npm ci --ignore-scripts`, `tofu_wrapper: false`, secret-free `tofu init` for forks, and no pull-request metadata in `run:`. `production-admin` holds a Grafana stack token and the Synthetic Monitoring token; `grafana_notification_policy` owns the whole policy tree, imported first; the Canary link check sets `no_follow_redirects` and `valid_status_codes = [302]`. A drill is about 51,000 billed Workflow steps: inside Workers Paid, not Workers Free, so the preview account needs Workers Paid. New checks: Audit Logs v2 coverage, cross-account environment secrets, Dependabot's SHA bumps.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the drift plan is hourly in the body too, and the read-only claim cites ADR 0024. The status App's private key joins the yearly rotation; it had none. The body also follows ADR 0027 (`exports`, plan summaries with values, the release gate running CI) and ADR 0024 (`production-plan`'s permissions).
+
 # Deliver through reusable workflows called from each ops repo: plan read-only, apply behind at most one approval, and drill restores in a throwaway environment
 
 [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md) puts every deployment in its own ops repo, which calls this repo's reusable workflows at a pinned ref and holds the `production`, `production-admin` and `preview` GitHub environments. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) fixes what each credential can do and that `production-admin` and `preview` need the Operator's approval. This ADR decides the pipeline between them.
@@ -40,7 +42,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 
 - **One input, `config-path`,** defaulting to `deployment.json`.
 - **Secrets are a documented contract of fixed names.** A job that names an `environment` reads that ops-repo environment's secrets directly, since callers can't pass environment secrets. The names are `CLOUDFLARE_API_TOKEN`, `STATE_R2_KEY_ID`, `STATE_R2_SECRET`, `STATE_PASSPHRASE` and the Status Worker's read tokens.
-- **Repo-level secrets are passed explicitly,** because `secrets: inherit` doesn't cross personal accounts. The only one is the status App's private key.
+- **Repo-level secrets are passed explicitly,** because `secrets: inherit` doesn't cross personal accounts. The only one is the status App's private key. It joins ADR 0024's yearly rotation: the Operator generates a new key in the App's settings, swaps the secret and deletes the old key.
 - **Code is checked out at `job.workflow_sha`,** never at a second ref the caller supplies.
 - **Every caller sets `cache-mode: none`, and nothing restores a cache.** `workflow_dispatch` and `schedule` runs write to the default branch's cache scope, so untrusted build code could otherwise poison the cache a prod deploy restores.
 - **`production-admin` holds two Grafana credentials:** a stack service-account token, for the contact point, the notification policy and the rule group, and the Synthetic Monitoring access token, for the checks. Neither can stand in for the other. The Cloud access policy token that installs Synthetic Monitoring is a third, and never reaches CI ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)).
@@ -59,7 +61,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 - **Inputs:**
   - one structured `infra/env` output, `workers`: each Worker's bindings, variables and routes;
   - `deployment.json`;
-  - each Worker's checked-in `wrangler.base.jsonc`: `main`, compatibility settings, Durable Object classes and migrations, and Cron Triggers. In a preview it comes from the pull request, as data: the script copies an allowlist of its fields and fails on any key outside it.
+  - each Worker's checked-in `wrangler.base.jsonc`: `main`, compatibility settings, Durable Object `exports` ([ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md); classes and migrations as first decided), and Cron Triggers. In a preview it comes from the pull request, as data: the script copies an allowlist of its fields and fails on any key outside it.
 - **Output:** `.rendered/<worker>.<env>.jsonc`, with a do-not-edit header.
 - **Guards** fail the run when:
   - a Worker isn't named `<name>`, `<name>-pr-<n>` or `<name>-drill`;
@@ -81,11 +83,11 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 ### A new `production-plan` environment
 
 - **No approval, `main` only, read-only credentials:**
-  - a Cloudflare token with Workers Scripts, KV, D1, DNS and zone Read;
+  - a Cloudflare token with Metadata Read-Only (in place of Workers Scripts Read), KV, D1, R2, DNS and zone Read ([ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md));
   - a read-only R2 key on the state bucket;
   - the state passphrase.
 - **It plans `infra/zone` and `env/prod` with `-lock=false`** and saves both plans, encrypted with OpenTofu's `plan` encryption.
-- It can delete nothing, so ADR 0007's rule that nothing unattended can delete holds.
+- It can write and delete nothing, so it adds nothing to what [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md)'s table lets unattended credentials do. ADR 0007's rule that nothing unattended can delete is restated there as a recoverability claim.
 
 ### Prod: `deploy.yml`
 
@@ -96,7 +98,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
    - the apex's Canary link Short URL answers 302 to its Target URL;
    - `status.` answers 200;
    - `api.` answers 401 to a request without a key.
-5. **On a failed smoke test,** `wrangler rollback` returns `redirect` and `status` to their previous versions and the run fails. GitHub's failure email is the alert. `links-data` and OpenTofu are never rolled back automatically: Durable Object migrations block rollback, and data changes go forward only.
+5. **On a failed smoke test,** `wrangler rollback` returns `redirect` and `status` to their previous versions and the run fails. GitHub's failure email is the alert. `links-data` and OpenTofu are never rolled back automatically: `links-data` declares its Durable Objects with `exports`, which rules out Worker versions and so `wrangler rollback` ([ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md)), and data changes go forward only.
 6. **`teardown`** of previews (below).
 
 - `admin` runs before `prod` because `redirect` calls `links-data` and `status` reads D1.
@@ -142,11 +144,11 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 ### Plans and logs in a public ops repo
 
 - **No plan is printed to the log.**
-  - Each plan job writes a **job summary:** per root, a table of resource addresses and their actions, with replacements and deletions highlighted and no attribute values.
+  - Each plan job writes a **job summary:** per root, a table of resource addresses and their actions, with replacements and deletions highlighted. For every update, replacement and delete it shows each changed attribute before and after, with sensitive attributes masked ([ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md); no attribute values as first decided).
   - Full plans exist only as encrypted plan artifacts. They are kept for 1 day and deleted by the job that applies them. The runbook shows how to `tofu show` one locally with the passphrase.
 - **Wrangler's output is left as it is:** version IDs and routes.
 - **The ops repo keeps run logs for 30 days.**
-- **Drift:** a weekly scheduled plan in `production-plan` with `-detailed-exitcode` fails on any drift, so GitHub emails the Operator.
+- **Drift:** an hourly scheduled plan (`drift_schedule`, ADR 0026; weekly as first decided) in `production-plan` with `-detailed-exitcode` fails on any drift, so GitHub emails the Operator.
 
 ### Restore drills
 
@@ -171,7 +173,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 ### Releases and bumps
 
 - **`release.yml` in this repo** is dispatched with a `version`:
-  - it refuses unless `main`'s CI is green;
+  - it runs this repo's CI on the commit it is about to tag, and tags only if it passes ([ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md)); it no longer reads checks left on `main`;
   - it tags `main`'s HEAD;
   - it creates a GitHub Release with generated notes and a hand-written **Upgrading** section for any change to the config or secret contract.
 - **Before 1.0, a breaking change to that contract bumps the minor version.**

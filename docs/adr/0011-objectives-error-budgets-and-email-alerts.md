@@ -4,7 +4,7 @@ status: accepted
 
 > Amended by [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md): after each rollup, the Status Worker in prod also polls Audit Logs v2 and emails a digest of destructive changes. It sends an "audit watch blind" alert when every poll for an hour has failed. The blind alert uses this ADR's alert state in D1.
 >
-> Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): `shard-fallback` and `not-found` stay eligible for the latency Objective, which now depends on where the Operator placed the shards.
+> Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): `shard-fallback` stays eligible for the latency Objective, which now depends on where the Operator placed the shards. `not-found` stayed eligible too, until ADR 0022 (below) took it out.
 >
 > Amended by [ADR 0020](./0020-index-redirect-events-by-namespace-source-and-outcome-and-heal-rollup-gaps.md): the additive counts are `sum(sample_interval * _sample_interval)`; Probe-minutes the rollup can no longer observe (healed buckets past Grafana's 14 days) leave the uptime denominator and are shown as unobserved.
 >
@@ -17,6 +17,10 @@ status: accepted
 > Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): the Status Worker sends four more emails: off-account copy stale, Short domain expiring, registrar lock removed, and domain check blind.
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Cloudflare does record Worker errors below Enterprise (Workers Logs and Issues), with no email destination, so this ADR's alerts stay. `send_email` uses the current Email Service API. The alert address is an alias.
+
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `links-data` emails the Operator its integrity findings itself, through its own `send_email` binding. A fourth Grafana rule we own, "Integrity checks stale or failing", joins ADR 0021's three, fed by a heartbeat `links-data` pushes after each hourly run.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): two rules that lived only in the PRD are stated here: an alert sends its email before it writes alert state, and no email a Worker sends the Operator carries a link. The executions table, the Grafana alert rules, the execution headroom and the latency Objective's eligible outcomes follow ADRs 0021 and 0022.
 
 # Report three rolling 30-day Objectives from additive rollup counts, and alert the Operator by email from both Grafana and the Status Worker
 
@@ -35,7 +39,7 @@ Decided in [What SLOs does the Status page report against?](https://github.com/a
   | Redirect latency | eligible Redirects with `duration_ms` ≤ 200 | 99% | 1% of eligible Redirects |
   | Error rate | eligible Redirects that don't answer 5xx | 99.9% | 0.1% of eligible Redirects |
 
-- **Eligible Redirects** are Visitor Redirects (`source=visitor`) that performed a lookup: outcomes `kv-hit`, `shard-fallback`, `not-found`, `gone` and `error`. These are left out of both the numerator and the denominator:
+- **Eligible Redirects** are Visitor Redirects (`source=visitor`) that performed a lookup: outcomes `kv-hit`, `shard-fallback`, `not-found`, `gone` and `error`. For the latency Objective alone, `not-found` is not eligible ([ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md)). These are left out of both the numerator and the denominator:
   - Probes, which are uptime's job. They stay in ADR 0003's percentile charts.
   - `malformed` and `rate-limited` ([ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)), which answer instantly and would pad the good count during a flood.
   - `shed`, the cost brake's 503. It is deliberate load-shedding, mostly aimed at guessers, and it gets its own alert. If it counted, anyone flooding unknown Short codes could spend the error budget.
@@ -67,9 +71,10 @@ Decided in [What SLOs does the Status page report against?](https://github.com/a
   A request-based Objective with fewer than `objective_min_eligible` eligible Redirects in the window shows "insufficient data". Below 1,000, a single failed Redirect spends the whole 0.1% budget. The page calls them Objectives, not an SLA: they are targets the service reports against, not a contract.
 - **Alerts** go only to the Operator, by email, and never page anyone. The alert address is an alias, not a personal mailbox, because it is committed in a public ops repo ([ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md)).
   - **From Grafana,** which keeps working through a Cloudflare-wide outage:
-    - **Redirects down:** a per-check `ProbeFailedExecutionsTooHigh` alert on the Canary link check, with threshold 10 over 5 minutes. With 2 locations × 5 runs, it fires when every execution in the window failed.
-    - **Status page stale:** a second Synthetic Monitoring HTTP check fetches the prod Status page snapshot and asserts it isn't stale (ADR 0003's 15-minute rule). It runs every 10 minutes from one location, and it alerts after 2 consecutive failures, about 20 minutes. This covers the Status Worker's own alerts falling silent.
-    - Both use one email contact point for the Operator and a notification policy that routes `namespace=synthetic_monitoring` to it.
+    - **Redirects down:** a rule we own on `probe_success` ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)). It fires when, over three Probe frequencies (6 minutes at the default), no location's Canary link check succeeded and at least two locations reported. It replaces the per-check `ProbeFailedExecutionsTooHigh` alert first decided here.
+    - **Status page stale:** a second Synthetic Monitoring HTTP check fetches the prod Status page snapshot and asserts it isn't stale (ADR 0003's 15-minute rule). It runs every 10 minutes from two locations, and the rule fires when neither succeeded over 20 minutes and at least one reported. This covers the Status Worker's own alerts falling silent.
+    - **Probes blind:** fewer than two locations reported on the Canary link check in 10 minutes, or none reported on the Status page check in 30 minutes.
+    - All three use one email contact point for the Operator, and the notification policy routes on a label the rules carry.
   - **From the Status Worker,** evaluated at the end of each 5-minute rollup:
     - **Fast burn,** for each request-based Objective. It fires when the 1-hour burn rate is ≥ `fast_burn_rate` **and** the 5-minute burn rate is ≥ `fast_burn_rate` **and** at least `fast_burn_min_bad` bad Redirects happened in that hour. The floor stops a single failure at low traffic from firing it. At 14.4×, an hour at that rate spends 2% of the 30-day budget.
     - **Budget exhausted,** for any of the three Objectives, when its remaining Error budget reaches 0.
@@ -77,6 +82,8 @@ Decided in [What SLOs does the Status page report against?](https://github.com/a
     - There is no slow-burn alert. The page shows slow burn.
     - It sends through the `send_email` binding, now part of Cloudflare Email Service, with the structured `send({ to, from, subject, text })` call. The raw-message `EmailMessage` API is labelled legacy and isn't used. The binding's `destination_address` restricts it to the Operator's verified address, and sending to a verified address is free on every plan.
     - Alert state lives in D1. Each condition sends one email when it starts firing and one when it resolves. The cost-brake alert sends once per UTC day.
+    - **An alert sends its email first and writes its alert state second,** so a failed run can duplicate an alert and never loses one.
+    - **No email a Worker sends the Operator carries a link.** The alert address is an alias committed in a public ops repo, so an alert with a link is a phishing template ([ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)). An email names its runbook or dashboard page in words. Where it must name a Short URL or an object key, as ADR 0026's findings do, that is an identifier to look up, not a link to follow.
 - **Where it lives** ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)):
   - `infra/zone`: Email Routing on the zone and the Operator's verified destination address.
   - `infra/env`, when `probes_enabled`: the Grafana contact point, the notification policy, `grafana_synthetic_monitoring_check_alerts` on the Canary link check, and the Status page check.
@@ -91,9 +98,11 @@ $0 extra.
 
   | Check | Executions |
   |---|---|
-  | Probes | 89,280 |
-  | Status page check | 4,464 |
-  | **Total** | **about 93.7k** |
+  | Probes, 3 locations every 2 minutes | 66,960 |
+  | Status page check, 2 locations every 10 minutes | 8,928 |
+  | **Total** | **about 75.9k** |
+
+  These are [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)'s figures. As first decided, two locations every minute came to about 93.7k.
 
 ## Considered options
 
@@ -112,7 +121,7 @@ $0 extra.
 
 - **A Cloudflare-wide incident spends the uptime budget.** The Objectives are reported, not promised. Such a breach shows on the page and needs no change.
 - **The Status Worker's alerts go down with Cloudflare.** Grafana's Redirects-down alert covers the outage itself, and the stale-page check covers the Status Worker failing on its own.
-- **Grafana's execution headroom is now about 6k a month.** A third Probe location, or a faster Status page check, needs a paid plan or less frequent Probes.
+- **Grafana's execution headroom is about 24k a month** ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md); it was about 6k as first decided). Probing every minute from three locations needs a paid plan.
 - **Email Routing takes the zone's MX records,** so the short domain can receive mail only through Email Routing.
 - **The `production` token gains Email Routing permissions** for `infra/zone`: the zone's rules and the account's destination addresses.
 - **At today's traffic, the request-based Objectives show "insufficient data"** until the window holds 1,000 eligible Redirects. Uptime is meaningful from day one.

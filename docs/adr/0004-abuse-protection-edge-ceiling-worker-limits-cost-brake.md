@@ -14,6 +14,8 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the spend alert is a manual step, because OpenTofu can't own one, with Cloudflare's automatic $10 alert as the backstop. Failed authentication checks the key's shape before the KV read, and consults the limiter first once an IP is over it. IP-keyed limits are cited as a deliberate deviation from Cloudflare's advice. "A Workflow for the cost brake" joins the considered options, rejected.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the two guessing claims in the body follow ADR 0022.
+
 # Protect against abuse with one edge flood ceiling, Worker-side limits on the shard fallback and on Creators, and a daily cost brake
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us:
@@ -38,7 +40,7 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
 - **Shard-fallback limit:** on every KV miss, the Worker checks a Workers rate limiter binding before calling the shard.
   - The key is the client IP: the full address for IPv4, the /64 prefix for IPv6.
   - The limit is **30 per 60 s**. Over it, the Worker answers **429 with `Retry-After: 60`** and never calls the shard.
-  - Real Visitors almost never miss KV, because only Links under about 60 s old do. Guessers get about 30 tries a minute. At 1B Links that finds one live Link about every 2 hours per IP.
+  - Real Visitors almost never miss KV, because only Links under about 60 s old do. The limit bounds shard cost, not guessing: it is checked only after a KV miss, so a guess that hits a live Link never reaches it. The guess rate is the edge ceiling's, about 2.6M a day per IP per data center, which at 1B Links finds about 740 live Links a day ([ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md)).
 - **Daily cost brake:** a Cron Trigger on the Redirect Worker runs every 5 minutes.
   - It sums today's weighted Redirect events that reached a shard (`shard-fallback`, `not-found`) from Analytics Engine.
   - Above **3M per UTC day**, it sets a KV flag that stays set until midnight UTC.
@@ -108,4 +110,4 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
 - **The limits are approximate.** Both the edge rule and the rate limiter bindings count per location, and the daily cap lags by minutes. They bound damage; they are not an accounting system.
 - **The one rate limiting rule is used up.** Any other edge rate limit, for example for a preview environment on the same zone, has to share it or move into the Worker.
 - **Keying limits on the client IP goes against Cloudflare's advice,** knowingly. The rate limiting binding's docs say "It is not recommended to use IP addresses or locations (regions or countries), since these can be shared by many users in many valid cases." The shard-fallback and failed-authentication limits are keyed on the IP anyway, because a Visitor is anonymous and no better key exists. Only misses and failed logins are limited, which keeps the shared-IP cost small.
-- **Custom aliases are guessable by design.** Only the shard-fallback limit slows guessing them.
+- **Custom aliases are guessable by design.** Only the edge ceiling slows guessing them: a 1M-word dictionary takes about 9 hours ([ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md)).

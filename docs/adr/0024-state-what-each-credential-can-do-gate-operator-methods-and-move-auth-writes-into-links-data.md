@@ -8,6 +8,8 @@ status: accepted
 
 > Amended by [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md): the hand-applied backup bucket configuration's state uses a 32-random-byte passphrase, with `enforced` set.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the weekly drift job is the hourly integrity job in the body too (ADR 0026), and the change log's erasure time counts the off-account copy (ADR 0025).
+
 # State what each credential can do to Link data, gate Operator methods with a secret, move `AUTH` writes into `links-data`, and take the backup locks out of CI's reach
 
 [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) says "nothing that runs unattended in prod can delete anything". It reasons about API-token permissions, and it is false for data. A token that can deploy a Worker controls everything that Worker can bind, and three Cloudflare facts mean a binding can't be fenced:
@@ -51,7 +53,7 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 
 ### What `redirect` can still do is accepted
 
-- **Mass delete through the Creator path.** `redirect` authenticates Creators, so its code can call the ordinary delete for any Link with the Creator ID it reads from `LINKS`. Each delete erases the Target URL in the shard ([ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md)). Recovery is point-in-time recovery within 30 days, or the change log until "deleted wins" compaction clears it in about three months.
+- **Mass delete through the Creator path.** `redirect` authenticates Creators, so its code can call the ordinary delete for any Link with the Creator ID it reads from `LINKS`. Each delete erases the Target URL in the shard ([ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md)). Recovery is point-in-time recovery within 30 days, or the change log until "deleted wins" compaction clears it in about three months (about four counting the off-account copy, ADR 0025).
 - **KV writes.** `redirect` must read `LINKS`, `AUTH` and `FLAGS`, and a read binding is a write binding. Moving the legitimate writes elsewhere would change nothing.
 - **After a suspected `production` compromise** the runbook is: roll the token, redeploy `redirect` and `status` from a known commit, reconcile `LINKS` and `FLAGS`, diff `AUTH` against the latest locked `auth/` export and restore it, and review what was added to the bucket.
 
@@ -71,7 +73,7 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 - **Prod's backup bucket, its bucket locks and its lifecycle rules move to a hand-applied OpenTofu configuration in `infra/bootstrap`,** applied with the broad token, as [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md) does for the Grafana installation.
 - **Its state lives in the prod state bucket under its own key,** encrypted with the prod passphrase. It holds no secret, and `production-plan` can then plan it.
 - **`production-admin` drops R2 edit.** `env/prod` takes the bucket's name as an input and binds it to `links-data`.
-- **`production-plan` gains R2 read** and plans this configuration in the weekly drift job, so a changed or missing lock still fails the plan.
+- **`production-plan` gains R2 read** and plans this configuration in the hourly integrity job (the weekly drift job until ADR 0026), so a changed or missing lock still fails the plan.
 - **Previews are unchanged.** `infra/env` still creates a preview's bucket, which has no lock.
 - **KV namespaces and the Status database stay in `env/prod`.** `LINKS` rebuilds from the shards, `AUTH` restores from the bucket, and the Status database holds only rollups.
 
@@ -79,7 +81,7 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 
 - **Every Cloudflare API token and R2 key has `expires_on` 13 months after it is created or rotated.** All share one date.
 - **They are rotated together once a year,** by a runbook that sets the new expiry and rolls each value. A roll keeps the token's ID and permissions, so [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)'s protected token IDs don't change. Grafana's tokens join the same rotation.
-- **The weekly drift job checks its own `production-plan` token** and fails under 30 days left, so GitHub emails the Operator. That token stands in for the rest.
+- **The hourly integrity job (the weekly drift job until ADR 0026) checks its own `production-plan` token** and fails under 30 days left, so GitHub emails the Operator. That token stands in for the rest.
 - **`doctor` prints the days left on the laptop's tokens** and fails under 30.
 - **Tokens use the narrowest role that exists:**
 
@@ -117,7 +119,7 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 - **Amends ADR 0008:** `links-data` binds and writes `AUTH`; prod's bucket and locks are applied by hand. Three namespaces still stop a bug in one writer from deleting another's keys, but they were never a boundary against a deploy credential.
 - **Amends ADR 0010:** gated methods; the `operator` token and the laptop key; all audit records written by `links-data`; `ops record`; the corrections above.
 - **Amends ADR 0012:** raw SQL through Data Studio is logged in v1. The annual rotation produces a digest email for every rolled token, which is expected.
-- **Amends ADR 0016:** `production-plan`'s permissions, its plan of the bucket configuration, and the expiry check in the weekly job.
+- **Amends ADR 0016:** `production-plan`'s permissions, its plan of the bucket configuration, and the expiry check in the hourly integrity job (the weekly drift job until ADR 0026).
 - **Amends [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md):** `links-data` now binds `AUTH`. Suspension stays in the Creator object and `FLAGS`, so the Operator and the ceiling keep one code path.
 - **Changing a lock or lifecycle rule is hand work** with the broad token.
 - **Every Operator command now waits on a Workflow,** so `keys issue` takes seconds. The few steps each uses are far inside the included 500,000 a month.

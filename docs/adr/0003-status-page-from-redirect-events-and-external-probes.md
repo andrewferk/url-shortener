@@ -12,6 +12,14 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the Status Worker sets a Content-Security-Policy on every response. "A Workflow for the rollup" joins the considered options, rejected.
 
+> Amended by [ADR 0006](./0006-redirect-caching-kv-values-colo-cache-no-store.md): Redirect events gain the outcome `colo-hit`, a 302 served from the per-colo cache; `kv-hit` then means the colo cache missed and KV answered.
+
+> Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): the Status Worker binds `FLAGS`, which its rollup reads to send the "Creator at daily cap" and "Creator over ceiling: suspended" emails, and serves the abuse policy at `/abuse`. So it no longer runs without KV; serving the Status page still reads only D1.
+
+> Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): the Status Worker also reads `offsite:<utc-date>` keys in `FLAGS` for the "Off-account copy stale" email, and looks the Short domain up over RDAP daily.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the Probe count, locations and frequency follow ADR 0021, and "depends on neither KV nor the shards" is narrowed to serving the page.
+
 # Feed the Status page from self-timed Redirect events and external Probes, served by a separate Status Worker
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us no edge latency percentiles, no per-request edge log, and no health checks. So the Worker measures each Redirect itself and writes a Redirect event to Workers Analytics Engine. Uptime comes from Probes run by an external service. A separate Status Worker rolls both sources up into D1 every 5 minutes and serves precomputed snapshots. Because the page depends on the Worker seeing every Redirect, **every Redirect runs the Worker**: Redirects are never served from Workers Cache. The saving would be small anyway, since cache hits are still billed as Workers requests.
@@ -29,7 +37,7 @@ Decided in [How does the Status page get its metrics and where is it served?](ht
   - **Percentiles:** p50/p90/p99 come from `quantileExactWeighted`, weighted by `weight`.
 - **Volume** counts Visitor Redirects, broken down by outcome, and leaves out Probes. **Error rate** (the 5xx share of Visitor Redirects) is a separate series. It doesn't count toward uptime.
 - **Uptime** comes from Probes run by Grafana Cloud Synthetic Monitoring.
-  - Two locations follow the Canary link every minute. A minute counts as down when every location fails.
+  - Three Probe locations follow the Canary link every 2 minutes ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)). Each run stands for the Probe-minutes of its interval. A window is down when at least two locations reported and every report failed.
   - Probe Redirects run the real Redirect path, so their Redirect events count toward the latency percentiles. They're tagged `source=probe`, so they can be filtered out later.
   - **Probe round-trip latency** is measured from outside, including network, and is shown as its own series. It is never blended with server-side latency.
 - **Canary link:** a Link with the Custom alias `canary` and no Expiry. An idempotent post-deploy step creates it through the normal Link creation API, as an operations Creator, in prod and in every preview environment. The Worker recognizes it only to tag its Redirect events as `probe`.
@@ -37,7 +45,7 @@ Decided in [How does the Status page get its metrics and where is it served?](ht
   - It serves a pre-rendered JSON snapshot per view from D1, cached through the Cache API for 60 seconds.
   - It never queries metrics on a page view.
   - Every response from the Status Worker carries a `Content-Security-Policy` that allows only the page's own origin: `default-src 'none'`, with scripts, styles, images and `connect-src` from `'self'`, `frame-ancestors 'none'` and `base-uri 'none'`. The page loads nothing from a third party.
-  - It depends on neither KV nor the Durable Object shards, so it stays up through Redirect Worker bugs, bad deploys, and trouble on the Redirect path. A Cloudflare-wide outage takes it down too. The external Probes still record that outage, so it appears on the page afterwards.
+  - Serving the page depends on neither KV nor the Durable Object shards ([ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md) later gave the Worker a `FLAGS` binding, which only its rollup reads, for alerts), so it stays up through Redirect Worker bugs, bad deploys, and trouble on the Redirect path. A Cloudflare-wide outage takes it down too. The external Probes still record that outage, so it appears on the page afterwards.
 - **Rollups:** a Cron Trigger on the Status Worker runs every 5 minutes.
   - Each run queries the Analytics Engine SQL API and the Grafana Cloud API, using tokens stored as Worker secrets.
   - It recomputes and upserts the last 3 buckets at every resolution, so late data and missed runs heal themselves.
@@ -59,7 +67,7 @@ Decided in [How does the Status page get its metrics and where is it served?](ht
 
 **Today:** $0 extra.
 - Analytics Engine writes, D1 and Cron Triggers all fit Workers Paid's included amounts.
-- Two locations every minute is about 86k Probes a month, inside Grafana's free 100k executions.
+- Three locations every 2 minutes is about 67k Probes a month ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)), inside Grafana's free 100k executions. Two locations every minute, as first decided, was about 86k.
 
 **Peak:** one Analytics Engine write per Redirect at 30B/mo is about $7.5k/mo at list price, if Cloudflare starts billing for Analytics Engine as the pricing page warns. `redirect_event_sample_rate` is the lever.
 
