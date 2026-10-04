@@ -13,6 +13,8 @@ status: accepted
 > Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): the Status Worker also sends a "Redirect flood" alert when Redirect volume of every outcome exceeds `flood_alert_requests_per_second` (default 100) for two consecutive buckets. `not-found` leaves the latency Objective's eligible set and stays in the error-rate one, so each bucket stores an eligible count per Objective.
 >
 > Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): the Status Worker also sends "Creator at daily cap", once per Creator per UTC day, and "Creator over ceiling: suspended".
+>
+> Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): the Status Worker sends four more emails: off-account copy stale, Short domain expiring, registrar lock removed, and domain check blind.
 
 # Report three rolling 30-day Objectives from additive rollup counts, and alert the Operator by email from both Grafana and the Status Worker
 

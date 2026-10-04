@@ -17,6 +17,8 @@ status: accepted
 > Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): `FLAGS` also holds an undated `suspended:<creatorId>` key, written by `links-data` from the Creator object's `meta` and rewritten by a reconcile. The Status Worker binds `FLAGS` to list `cap:` and `suspended:` keys.
 >
 > Amended by [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md): `links-data` binds and writes `AUTH`, and writes every `auth/` export. Prod's backup bucket, bucket locks and lifecycle rules are applied by hand from `infra/bootstrap`, not by `production-admin`. Separate KV namespaces guard against a bug, not against a credential that can deploy a Worker.
+>
+> Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): losing the prod account, or every in-account backup, no longer loses everything. `links-data` pushes each daily, snapshot and `auth/` object to a compliance-locked bucket outside Cloudflare. `FLAGS` gains `offsite:<utc-date>`, and the bucket gains an unlocked `offsite/` prefix of markers. A rebuild from that copy has no reconcile, so up to about a day of Short codes can be reissued.
 
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
