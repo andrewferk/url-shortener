@@ -12,6 +12,8 @@ status: accepted
 >
 > Amended by [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md): a per-Creator daily ceiling (`creator_daily_link_ceiling`, default 600) sits above the daily cap. Past it, the Creator's object takes down every further Link of that UTC day as it arrives and suspends the Creator. The Status Worker sends a "Creator at daily cap" email.
 
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the spend alert is a manual step, because OpenTofu can't own one, with Cloudflare's automatic $10 alert as the backstop. Failed authentication checks the key's shape before the KV read, and consults the limiter first once an IP is over it. IP-keyed limits are cited as a deliberate deviation from Cloudflare's advice. "A Workflow for the cost brake" joins the considered options, rejected.
+
 # Protect against abuse with one edge flood ceiling, Worker-side limits on the shard fallback and on Creators, and a daily cost brake
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us:
@@ -51,6 +53,8 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
     - The cap is soft: outbox and KV lag let a Creator overshoot it by up to a few minutes' worth of creates.
     - The Creator's Durable Object stays a pure projection, off the create request path.
 - **Unauthenticated API calls:** a Workers rate limiter keyed by client IP (IPv6 /64) allows **10 failed authentications per 60 s**, then answers 429. This applies whatever authentication mechanism is chosen.
+  - **A credential that can't be valid costs no KV read.** The Worker checks the shape of the key (`lk_<keyId>_<secret>`, [ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)) before it reads `AUTH`, and a malformed one counts as a failed authentication.
+  - **Once an IP is over the limit, the limiter is consulted before the lookup,** so further attempts from it answer 429 without a KV read. Under the limit, the lookup comes first and only a failure is counted.
 - **No challenges anywhere:**
   - **Bot Fight Mode is off**, because it can't be skipped on Free and it challenges link previewers and API clients.
   - **Under Attack mode is off.**
@@ -72,7 +76,7 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
   | `shed` | The cost brake's 503 |
 
   The Status page shows each one as its own slice of volume. Requests blocked at the edge never reach the Worker, so they stay invisible to the Status page.
-- **Spend alert:** Cloudflare's usage budget alert is set to $5. It fires the next day, so it's a notification, not a brake.
+- **Spend alert:** a Cloudflare budget alert, set by hand in the dashboard as a step of the first prod deploy's checklist. OpenTofu can't own it: no API endpoint or provider resource for a budget alert is documented. Cloudflare also creates a $10 account-level budget alert by default on pay-as-you-go accounts that have none, which is the backstop. Either fires the day after the threshold is reached, so it's a notification, not a brake.
 
 ## Cost
 
@@ -82,7 +86,7 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
 - The edge ceiling costs nothing, because blocked requests aren't billed.
 - What gets past it is billed as Worker requests and KV reads, about $0.80 per extra 1M. Nothing on Free can cap that.
 - The brake caps only the Durable Object part.
-- The $5 alert and the manual levers cover the rest.
+- The budget alert, [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md)'s flood alert and the manual levers cover the rest.
 
 ## Considered options
 
@@ -94,6 +98,7 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
 - **Burst limit alone for Creators.** Rate limiter counts are kept separately in each Cloudflare location. A stolen credential used from many locations could create about 18k Links a minute, costing about $130 a day plus permanent junk Links. The daily cap is the only global limit.
 - **A synchronous quota check in the Creator's Durable Object before each claim.** Exact, but it puts that object on the create path, with extra latency and a fail-open-or-closed choice. The soft cap from the outbox avoids both.
 - **Capping by the number of bursts per day.** Counting minutes of activity lets a distributed attacker fit everything into one minute. Counting trips of the burst limit never fires against an attacker who stays just under it in every location. Counting Links bounds the damage directly.
+- **A Workflow for the cost brake's count,** in place of the Cron Trigger. Rejected for the same reasons as for the rollup (ADR 0003): Workflows depend on Durable Objects, the very thing the brake protects, and a run that fails is simply repeated five minutes later.
 - **A global request counter in a Durable Object for the cost brake.** Exact, but it adds a billed call to every fallback, doubling the cost it protects against.
 
 ## Consequences
@@ -102,4 +107,5 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
 - **Only the edge sees floods that are blocked there.** The Status page's volume excludes them, and on Free there's no per-request edge log.
 - **The limits are approximate.** Both the edge rule and the rate limiter bindings count per location, and the daily cap lags by minutes. They bound damage; they are not an accounting system.
 - **The one rate limiting rule is used up.** Any other edge rate limit, for example for a preview environment on the same zone, has to share it or move into the Worker.
+- **Keying limits on the client IP goes against Cloudflare's advice,** knowingly. The rate limiting binding's docs say "It is not recommended to use IP addresses or locations (regions or countries), since these can be shared by many users in many valid cases." The shard-fallback and failed-authentication limits are keyed on the IP anyway, because a Visitor is anonymous and no better key exists. Only misses and failed logins are limited, which keeps the shared-IP cost small.
 - **Custom aliases are guessable by design.** Only the shard-fallback limit slows guessing them.

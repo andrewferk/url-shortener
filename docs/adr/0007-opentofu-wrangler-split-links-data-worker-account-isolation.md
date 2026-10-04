@@ -24,6 +24,8 @@ status: accepted
 
 > Amended by [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md): `links-data` declares its Durable Objects with `exports`, not tagged `migrations`; the class-delete guard is documented for `exports`, and the restore drill asserts the Worker-delete one. OpenTofu is pinned to 1.13.x. The state passphrase is 32 random bytes, `enforced` is set on state and plan, and rotation is by event, through a runbook.
 
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Worker Previews are rejected for service bindings, Workflows and `script_name` Durable Objects not being per-Preview; shared KV and D1 applies only when bound to the same ID. The spend alert leaves OpenTofu. Editor on one Worker can bind any KV, R2 or D1 resource. All three Workers set `workers_dev` and `preview_urls` to `false`. Every ruleset rule carries a `ref`; the `production` token holds Bot Management Write; `.terraform.lock.hcl` is committed. Routes instead of Custom Domains, and the single-account phase, are cited as deliberate deviations; the orphaned-DNS reason is dropped. A preview account that runs drills needs Workers Paid.
+
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 
 Cloudflare has no lock, trash or restore for a deleted Worker, KV namespace, D1 database or Durable Object namespace. Deleting a Worker also deletes the Durable Object namespaces it implements, so under [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)'s single Worker, one wrong delete loses every Link and tombstone. So the layout is designed around what each credential *can* destroy.
@@ -57,8 +59,9 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - KV namespaces and D1 databases;
   - DNS records;
   - zone settings and all rulesets ([ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s edge ceiling and emergency block, plus the explicit Bot Fight Mode off / Under Attack off / DDoS-defaults settings);
-  - the spend alert;
   - the Grafana Synthetic Monitoring checks.
+
+  The spend alert is not in this list: no API or provider resource exists for a budget alert, so it is set by hand (ADR 0004).
 
   It uses the `cloudflare/cloudflare` provider (pinned exactly, per ADR 0001) and `grafana/grafana`.
 - **Wrangler** owns each Worker: code, bindings, Durable Object migrations, Cron Triggers, routes, secrets and D1 schema migrations (`wrangler d1 migrations apply`).
@@ -70,11 +73,14 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - every variable in the parameters table below.
 
   It is generated, never hand-edited, because `wrangler deploy` drops any binding its config doesn't declare. Local development renders the same config.
-- **Routes are plain Worker routes, not Custom Domains.** OpenTofu owns a proxied placeholder DNS record for each hostname, so `tofu destroy` removes it. Custom Domains are avoided for three reasons:
-  - each issues an Advanced Certificate that outlives the domain;
-  - `wrangler delete` can leave orphaned DNS records behind;
-  - in CI, Wrangler silently takes over a hostname already attached to another Worker.
+- **Routes are plain Worker routes, not Custom Domains.** OpenTofu owns a proxied placeholder DNS record for each hostname, so `tofu destroy` removes it. This goes against Cloudflare's guidance, knowingly: "If your Worker is your application's origin, use Custom Domains." Custom Domains are avoided for three reasons:
+  - each issues an Advanced Certificate, which "is **not** automatically deleted" with the Custom Domain;
+  - Custom Domains don't support per-Worker roles yet, which the deploy tokens rely on;
+  - in CI, Wrangler silently takes over a hostname already attached to another Worker. The provider review reported this; research did not verify it.
+
+  An earlier reason, that `wrangler delete` can leave orphaned DNS records behind, is dropped: no source for it was found.
 - **Durable Objects use tagged `migrations`.** Cloudflare calls it legacy, but it isn't deprecated, and gradual deploys work with it when no migration is pending. Moving to the newer `exports` stays possible later; moving back from `exports` is not, and its docs and code still disagree.
+- **All three Workers set `workers_dev = false` and `preview_urls = false`,** and the render script enforces both. `preview_urls` is set explicitly because `workers_dev = false` does not disable Version or Preview URLs, and an omitted `preview_urls` leaves the stored setting alone.
 - **Secrets never go through OpenTofu,** so none are in state. CI pushes them with `wrangler secret bulk`.
 
 ### Roots and state
@@ -87,10 +93,9 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - the Status Worker's two read tokens.
 - **`infra/zone`:** one state per Cloudflare account, holding everything that exists once per zone or account:
   - zone settings and all rulesets;
-  - DNS records that belong to no environment;
-  - the spend alert.
+  - DNS records that belong to no environment.
 
-  A Free zone has one ruleset per phase and `cloudflare_ruleset` owns the whole rule list, so only this root touches rulesets.
+  A Free zone has one ruleset per phase and `cloudflare_ruleset` owns the whole rule list, so only this root touches rulesets. Every rule carries a `ref`: without one, the provider may delete and recreate a rule when the ruleset changes.
 - **`infra/env`:** one root, with one state per environment (`env/prod`, `env/pr-<n>`) selected by the backend key, not by workspaces. It holds everything that exists once per environment:
   - KV namespaces and the D1 database;
   - the environment's DNS records. A record belongs to the environment whose hostname it is, so the apex, `api.` and `status.` belong to prod.
@@ -102,6 +107,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
 - **Modules** go under `infra/modules/`, and only where both roots actually reuse something.
 - **State backend:**
   - OpenTofu's S3 backend on R2, with Cloudflare's documented R2 flags and `use_lockfile` locking. R2 supports the conditional writes that locking needs.
+  - Each root commits its `.terraform.lock.hcl`, so provider binaries are hash-checked, and CI runs `tofu init -lockfile=readonly`.
   - OpenTofu is pinned to 1.12.x (`use_lockfile` needs ≥1.10).
   - There is one bucket per account (`tofu-state-prod`, and `tofu-state-preview` for previews), each reachable only with its own bucket-scoped R2 key.
 - **State encryption:** OpenTofu's native `aes_gcm` with a `pbkdf2` passphrase, one per bucket.
@@ -139,7 +145,7 @@ These are variables of `infra/env`. They reach the Workers through the rendered 
 | `env_name` | `prod` | `pr-<n>` |
 | `base_domain` / `preview_base_domain` | the short domain | the short domain until the split |
 | `redirect_event_sample_rate` (ADR 0003) | 1.0 | 1.0 |
-| `cost_brake_daily_threshold` (ADR 0004) | 3M | **100k** |
+| `cost_brake_daily_threshold` (ADR 0004; ADR 0022 applies one twenty-fourth of it per UTC hour) | 3M (125,000 an hour) | **100k** (about 4,167 an hour) |
 | `force_shedding` (ADR 0004) | false | false |
 | `creator_burst_per_minute`, `creator_daily_link_cap` (ADR 0004) | 60, 300 | 60, 300 |
 | `probes_enabled` | true | false |
@@ -156,10 +162,11 @@ Each set of credentials is kept in a separate GitHub environment. Cloudflare API
 
 | GitHub environment | Runs | Cloudflare token can | Approval |
 |---|---|---|---|
-| `production` (from `main` only) | Deploys `redirect` and `status`, applies `infra/zone`, and creates the Canary link (OIDC `environment=production`) | Edit `redirect` and `status` only. Workers Routes, rulesets, zone settings and the spend alert. **No KV, D1 or Workers Admin**, so it can't delete a Worker or any data. | None |
+| `production` (from `main` only) | Deploys `redirect` and `status`, applies `infra/zone`, and creates the Canary link (OIDC `environment=production`) | Edit `redirect` and `status` only. Workers Routes, rulesets, zone settings, and Bot Management Write so it can turn Bot Fight Mode off. **No KV, D1 or Workers Admin**, so it can't delete a Worker or any data through the API. | None |
 | `production-admin` (from `main` only) | Applies `env/prod`, deploys `links-data` and runs D1 schema migrations | Edit `links-data`. KV, D1, DNS. The Grafana SM access token. | The Operator approves each run |
 | `preview` | Applies `env/pr-<n>`, deploys and tears down previews | Workers Admin, KV, D1, DNS and Workers Routes in the account the previews live in. No rulesets or zone settings. | The Operator approves each run (single-account phase) |
 
+- **A token's permissions don't bound what its Worker can bind.** Cloudflare documents that Editor on one Worker is enough to deploy it with bindings to any KV, R2 or D1 resource: "You do not need separate permissions on the bound resources to deploy the Worker." So "No KV, D1" above describes the token's own API calls, not the data its Worker can reach. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) restates the claim on that basis.
 - **The Operator's own broad token** stays in their password manager for bootstrap and emergencies. It is also what ADR 0005's Operator CLI uses.
 - **The Status Worker's read tokens** are created once by hand and pushed as Worker secrets from GitHub environment secrets. They are an Account Analytics Read token for the Analytics Engine SQL API and a Grafana `metrics:read` access policy token. No CI credential can create credentials: OpenTofu doesn't mint tokens, which would need token-creation rights and would put the values in state.
 - **Previews reuse the Analytics Engine read token**, because each reads only its own dataset. They get no Grafana token.
@@ -178,7 +185,7 @@ Each set of credentials is kept in a separate GitHub environment. Cloudflare API
   - `prevent_destroy`;
   - the `links-data` binding guard.
 
-  This is acceptable only while prod holds no Links anyone else relies on.
+  This is acceptable only while prod holds no Links anyone else relies on. The single-account phase, and pull-request code running beside the `preview` token ([ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md)), go against Cloudflare's recommendation quoted above and, as the provider review reports it, GitHub Security Lab's guidance on untrusted pull-request code. Both are knowing deviations, and the account split is the fix.
 - **The trigger:** the split happens before the Operator admits the first Creator other than CI's operations Creator. The Operator CLI's `creators add` enforces this against prod: it refuses while `preview_base_domain` still equals the prod domain.
 - **The move** changes `account_id` and `preview_base_domain` for previews, to a second domain or the preview account's `workers.dev` subdomain. No code changes. Buying a second domain is deferred until then.
 
@@ -189,7 +196,7 @@ Each set of credentials is kept in a separate GitHub environment. Cloudflare API
 - Previews run inside Workers Paid's included amounts, and there is no second domain.
 
 **After the split:**
-- The preview account runs on Workers Free if every binding previews use is available there; otherwise it's another $5/mo.
+- The preview account runs on Workers Free if everything previews and drills use is available there; otherwise it's another $5/mo. Restore drills settle it: a drill is about 51,000 Workflow steps, and Workers Free allows 3,000 a day, so the account that runs drills needs Workers Paid.
 - A preview domain costs about $10/yr, or $0 on `workers.dev`.
 
 ## Considered options
@@ -200,9 +207,10 @@ Each set of credentials is kept in a separate GitHub environment. Cloudflare API
   - secrets would land in state;
   - `wrangler dev` would still need every binding declared a second time.
 - **Cloudflare Worker Previews** (GA 2026-09-22). They create a Preview per branch with its own Durable Objects and delete it automatically. Rejected because:
+  - a Preview's service binding goes to the production Worker, and a Workflow binding to the existing Workflow, never to a matching Preview. `redirect` reaches the shards through a `script_name` Durable Object binding; what that resolves to in a Preview is not documented, and we assume it is production's `links-data` too. So every Preview would share one set of shards and Operator Workflows;
   - Cron Triggers don't run in Previews, so ADR 0004's cost brake and ADR 0003's rollups would be dead;
-  - KV and D1 are shared across every Preview, so PR 41's shards would write into the KV that PR 42 reads, and both would claim `canary`;
-  - a Preview lives under the production Worker, so its token can deploy to production.
+  - KV and D1 are shared by any two Previews bound to the same resource ID, and nothing creates a namespace or database per Preview. PR 41's shards would write into the KV that PR 42 reads, and both would claim `canary`;
+  - a Preview lives under the production Worker, so a credential that deploys one can deploy production. Research confirmed the first half only.
 - **Durable Objects inside `redirect`** (ADR 0001 as written). Every routine deploy, and any delete, would carry every Link. Cloudflare advises that *"Durable Object lifecycle changes should be deployed independently of other code changes."*
 - **One account permanently, protected only by guards.** KV and D1 permissions are account-wide, and creating or tearing down a preview Worker needs account-wide Workers Admin. So a preview credential could always delete prod. Kept only as the phase before the first real Creator.
 - **A second domain from day one.** It would allow previewing ruleset changes and make the later move trivial. Deferred on cost.

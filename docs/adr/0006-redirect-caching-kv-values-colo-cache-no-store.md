@@ -6,9 +6,11 @@ status: accepted
 >
 > Amended by [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md): `LINKS` keys, and so the per-colo cache key, are `<shard hex>:<Namespace ID>:<Short code>`.
 >
-> Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): a Link's Target URL and Expiry are immutable as a chosen property of the service, not because the caches lack invalidation. The 90 s delete bound is unchanged.
+> Amended by [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md): a Link's Target URL and Expiry are immutable as a chosen property of the service, not because the caches lack invalidation. The delete bound, about 60 s, is unchanged.
 >
 > Amended in place by [Does the delete bound drop now that `cacheTtl` can be 30 s?](https://github.com/andrewferk/url-shortener/issues/59): KV's `cacheTtl` minimum fell from 60 s to 30 s on 2026-01-30, so `cacheTtl` is 30 s and the delete bound is about 60 s, not 90 s. "Cached KV reads are billed" is restated as an assumption, with a spike to measure it and a rule for the per-colo cache if it proves false.
+
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): ADR 0019's note above says the delete bound is about 60 s, not 90 s.
 
 # Cache Redirects only inside the Worker: a 30 s per-colo cache in front of a 30 s KV cache, `no-store` to browsers, and no purge
 

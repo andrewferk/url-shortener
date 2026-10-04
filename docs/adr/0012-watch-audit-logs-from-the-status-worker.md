@@ -8,6 +8,8 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): the watch stays in the Status Worker and also polls Audit Logs v1 for Data Studio SQL and Email Routing changes. Logpush is still not used, though it no longer needs Enterprise. Worker deploys, routes, rulesets and zone settings stay out of the watch; the ops repo's hourly integrity job compares them with `main`. "Data-level destruction stays unwatched" no longer holds for `LINKS`, which `links-data` sweeps against the shards.
 
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Logpush of audit logs is no longer Enterprise-only (self-service on Free, 25 GB a month included; the audit dataset on Free is inferred). Data Studio SQL is logged in Audit Logs v1. The digest carries no links, and goes to an alias.
+
 # Watch Audit Logs v2 from the Status Worker for destructive changes, and email the Operator a digest
 
 Cloudflare sends no alert when a Worker, KV namespace, D1 database, R2 bucket or DNS record is deleted ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). The guards so far protect against *OpenTofu* deleting things:
@@ -86,7 +88,7 @@ The API filters on when an action happened, not on when Cloudflare recorded it. 
   - the actor's email or token name, its context (`dash`, `api_token`, …) and its IP;
   - the `cf_ray_id`;
   - "late by Xh" where it applies.
-- **At most 50 lines,** then "and N more", with a pointer to the dashboard's audit log.
+- **At most 50 lines,** then "and N more". The digest carries no links. It says in words where the dashboard's audit log is. The alert address is an alias committed in a public repo, and a "was this you?" email with a link is a phishing template.
 - **The subject line says whether the digest holds a protected resource or a protection-removing change,** so those stand out from routine emails such as the Operator's own dashboard deletes.
 
 ### When the watch is blind
@@ -133,7 +135,7 @@ $0 extra.
 - **Watch rulesets, routes and zone settings too.** They change on every merge, and a bad change already shows up as failing Probes.
 - **A new Worker with no routes and its own Cron Trigger.** It would need its own `send_email`, its own state, and its own external watchdog, which Grafana's roughly 6k of monthly execution headroom can barely afford.
 - **A scheduled GitHub Actions job.** GitHub's cron runs late and can be dropped, and the job would put another Cloudflare credential in GitHub.
-- **Cloudflare Notifications or Logpush.** No Notification type covers audit events, and Logpush of `audit_logs_v2` needs Enterprise.
+- **Cloudflare Notifications or Logpush.** No Notification type covers audit events. Logpush is no longer Enterprise-only: it is self-service on Free, with 25 GB a month included. That the `audit_logs_v2` dataset can be selected on a Free account is inferred, not stated. [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md) decides it still isn't used.
 - **Adding Account Settings Read to the Analytics Engine read token.** Previews reuse that token, so every preview would hold it.
 - **A 3-hour window only.** It misses any event delayed more than 3 hours, silently, and the lag has no documented upper bound.
 - **A 24-hour window on every run.** It re-reads a day of events 288 times a day, and it is still blind past a day.
@@ -144,7 +146,7 @@ $0 extra.
 ## Consequences
 
 - **ADR 0007's "Cloudflare sends no alert when something is deleted" is answered,** within about 5 minutes when the log isn't delayed, and within a day when it is.
-- **Data-level destruction stays unwatched,** such as raw SQL writes through `query/v2` or Data Studio, and KV key writes. This is an accepted gap. The change log and `ops/` records are how such damage is found and undone.
+- **Data-level destruction stays unwatched,** such as raw SQL writes through `query/v2`, and KV key writes. Data Studio SQL is the exception: it is logged in Audit Logs v1, two entries per query, and ADR 0026 adds it to the watch. This is an accepted gap. The change log and `ops/` records are how such damage is found and undone.
 - **The public-facing Status Worker holds an account-wide read token.** It reads account membership and settings but can change nothing.
 - **Every delete by the Operator sends an email.** That is intended, and it is cheap at the Operator's volume of deletes.
 - **Adding a prod resource means adding it to the protected set** through an OpenTofu output. Otherwise its deletion by the `preview` token would go unreported during the single-account phase.

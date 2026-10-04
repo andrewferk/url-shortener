@@ -6,6 +6,8 @@ status: accepted
 >
 > Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): the ops repo's `main` carries a ruleset shipped in `examples/ops-repo/` (no force pushes, no deletion, changes by pull request), and every reusable workflow and example caller declares a minimal `permissions:` block, checked by a lint.
 
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the test package is `@cloudflare/vitest-plugin`, and `createTestHarness()` replaces `unstable_startWorker()`. Immutable releases are enabled, and tag pins are cited as a deliberate deviation from GitHub's SHA-pin advice. Private vulnerability reporting is switched on. The alert address is an alias.
+
 # License under Apache-2.0, keep this repo free of credentials, and run every deployment from its own public ops repo
 
 The project is headed for open source, and this repo is already public, with no licence. It should be embeddable, and must not foreclose a SaaS built on it. [ADR 0013](./0013-a-deployment-is-given-its-domain-and-owns-a-dedicated-zone.md) makes every deployment value an input, and the author's instance a deployment like any other Operator's.
@@ -20,7 +22,7 @@ Decided in [How is the project open-sourced: licence, repo contents, and packagi
 
 - **Apache-2.0,** with `LICENSE` and `NOTICE` at the root and no per-file headers. It is permissive, so embedding as a library has no friction, and its patent grant protects embedders.
 - **No CLA and no DCO.** Apache-2.0's section 5 already makes contributions inbound = outbound.
-- **`CONTRIBUTING.md`**, plus a **`SECURITY.md`** that sends vulnerability reports to GitHub private security advisories.
+- **`CONTRIBUTING.md`**, plus a **`SECURITY.md`** that sends vulnerability reports to GitHub private security advisories. Private vulnerability reporting is switched on in the repo's settings; it is off by default.
 - **The name stays `url-shortener`,** with the workspace scope `@url-shortener/*`, until something is published to npm.
 
 ### This repo holds no credentials
@@ -31,14 +33,14 @@ Decided in [How is the project open-sourced: licence, repo contents, and packagi
   - **reusable workflows** (`on: workflow_call`) for deploys, previews and restore drills;
   - docs, ADRs and the Link API's OpenAPI document;
   - **`examples/ops-repo/`:** the skeleton an Operator copies, with caller workflows and a config file of placeholder values. A change to a reusable workflow and to its example caller lands in one pull request.
-- **Its own CI** runs lint, unit tests of the core under Node, the Workers' integration tests in local `workerd` (`@cloudflare/vitest-pool-workers`), and `tofu validate`. It has no secrets, so a fork's pull request can run all of it safely. It is the required check.
+- **Its own CI** runs lint, unit tests of the core under Node, the Workers' integration tests in local `workerd` (`@cloudflare/vitest-plugin`, the new name of `@cloudflare/vitest-pool-workers`), and `tofu validate`. A test that needs a whole running Worker starts it with Wrangler's `createTestHarness()`, which replaces the deprecated `unstable_startWorker()`. It does not replace the plugin. It has no secrets, so a fork's pull request can run all of it safely. It is the required check.
 - **ADR 0013's ban on deployment values** in code, ADRs and committed config applies to this repo. The README describes the reference deployment without naming it. Its link lives only in the GitHub repo's Website field.
 
 ### Every deployment runs from its own ops repo
 
 - **An ops repo** holds:
   - caller workflows, which `uses:` this repo's reusable workflows at a pinned ref;
-  - the deployment's **committed, non-secret config:** `base_domain`, `preview_base_domain`, account IDs, the alert address, the Grafana stack, Objective and cost-brake overrides;
+  - the deployment's **committed, non-secret config:** `base_domain`, `preview_base_domain`, account IDs, the alert address (an alias, not a personal mailbox, because the repo is public), the Grafana stack, Objective and cost-brake overrides;
   - the `production`, `production-admin` and `preview` **GitHub environments**, with their secrets, deployment-branch rules and required reviewers.
 - **It is the trust root.**
   - ADR 0005's `repository_id` is the ops repo's, because a reusable workflow's OIDC token carries its caller's repository.
@@ -51,6 +53,7 @@ Decided in [How is the project open-sourced: licence, repo contents, and packagi
 ### Refs
 
 - **Semver tags** (`v0.x.y`), cut from `main`, are the release line for Operators. Dependabot or Renovate opens bump pull requests in an ops repo.
+- **Immutable releases are enabled on this repo,** so a released tag can't be moved, and can't be reused if its Release is deleted. That is what makes a tag pin safe. It is a knowing deviation: GitHub says "Pinning an action to a full-length commit SHA is currently the only way to use an action as an immutable release", and warns that a tag "can be moved or deleted if a bad actor gains access to the repository". Operators get tags because update bots follow them, and an Operator can't enforce SHA pins on a reusable workflow from their side anyway. The lock starts when the Release is published, so `release.yml` publishes the Release in the same run that creates the tag.
 - **The reference ops repo tracks `main` by commit SHA,** through automated bump pull requests. Merging one deploys prod, so every change is dogfooded before it's tagged.
 
 ### Previews of pull requests

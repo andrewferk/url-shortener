@@ -10,6 +10,8 @@ status: accepted
 >
 > Amended by [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md): Probes run from three Probe locations every 2 minutes. Each run stands for the Probe-minutes of its interval. A window is down when at least two locations reported and all failed; a lone failing report is unobserved. Executions are about 76k a month with the Status page check.
 
+> Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the Status Worker sets a Content-Security-Policy on every response. "A Workflow for the rollup" joins the considered options, rejected.
+
 # Feed the Status page from self-timed Redirect events and external Probes, served by a separate Status Worker
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us no edge latency percentiles, no per-request edge log, and no health checks. So the Worker measures each Redirect itself and writes a Redirect event to Workers Analytics Engine. Uptime comes from Probes run by an external service. A separate Status Worker rolls both sources up into D1 every 5 minutes and serves precomputed snapshots. Because the page depends on the Worker seeing every Redirect, **every Redirect runs the Worker**: Redirects are never served from Workers Cache. The saving would be small anyway, since cache hits are still billed as Workers requests.
@@ -34,6 +36,7 @@ Decided in [How does the Status page get its metrics and where is it served?](ht
 - **Hosting:** a separate Status Worker on the `status.` subdomain.
   - It serves a pre-rendered JSON snapshot per view from D1, cached through the Cache API for 60 seconds.
   - It never queries metrics on a page view.
+  - Every response from the Status Worker carries a `Content-Security-Policy` that allows only the page's own origin: `default-src 'none'`, with scripts, styles, images and `connect-src` from `'self'`, `frame-ancestors 'none'` and `base-uri 'none'`. The page loads nothing from a third party.
   - It depends on neither KV nor the Durable Object shards, so it stays up through Redirect Worker bugs, bad deploys, and trouble on the Redirect path. A Cloudflare-wide outage takes it down too. The external Probes still record that outage, so it appears on the page afterwards.
 - **Rollups:** a Cron Trigger on the Status Worker runs every 5 minutes.
   - Each run queries the Analytics Engine SQL API and the Grafana Cloud API, using tokens stored as Worker secrets.
@@ -66,6 +69,7 @@ Decided in [How does the Status page get its metrics and where is it served?](ht
 - **Serving Redirects from Workers Cache:** hits skip the Worker, so they'd be invisible to the page and to future click analytics. The saving is small, because hits are still billed as requests.
 - **A Pro zone:** it adds edge time-to-first-byte percentiles that include cache hits, and Health Checks. But it offers p95 rather than the required p90, and its Health Checks probe from inside the platform they're checking. It would also push cost to $25–30/mo, over budget. Whether Pro is worth it for abuse protection belongs to [How are Redirects and Link creation protected from abuse?](https://github.com/andrewferk/url-shortener/issues/8).
 - **Cron Trigger self-probes:** free, but they run on the platform they're checking, from locations we can't choose.
+- **A Workflow for the rollup,** in place of the Cron Trigger. Workflows run on Durable Objects, so the Status Worker would gain the dependency it was kept free of, and a failure on the Redirect path could take the page's data with it. Durable steps and retries buy nothing here, because the rollup already heals itself by recomputing recent buckets on every run.
 - **Snapshots in KV:** a KV incident would take down both the Redirects and the page reporting on them.
 - **Status page as a route on the Redirect Worker:** a bad deploy would take down both.
 
