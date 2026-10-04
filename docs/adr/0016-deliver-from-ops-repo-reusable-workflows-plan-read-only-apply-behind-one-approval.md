@@ -8,6 +8,8 @@ status: accepted
 >
 > Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): `deployment.json` gains `offsite_backup`; the secret contract gains `OFFSITE_KEY_ID` and `OFFSITE_SECRET`; the restore drill gains a seventh case, a rebuild from the off-account copy against an R2 stand-in; `doctor` gains checks of the ruleset, the domain, 2FA and the write key.
 
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): the weekly drift job becomes an hourly integrity job (`drift_schedule`). It also lists the live deployments of all three Workers and fails when a live version isn't the one the last deploy run recorded in a GitHub deployment record, which every deploy run now writes as its last step.
+
 # Deliver through reusable workflows called from each ops repo: plan read-only, apply behind at most one approval, and drill restores in a throwaway environment
 
 [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md) puts every deployment in its own ops repo, which calls this repo's reusable workflows at a pinned ref and holds the `production`, `production-admin` and `preview` GitHub environments. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) fixes what each credential can do and that `production-admin` and `preview` need the Operator's approval. This ADR decides the pipeline between them.

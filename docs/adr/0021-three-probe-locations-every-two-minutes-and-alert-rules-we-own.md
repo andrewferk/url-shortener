@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): a fourth Grafana rule we own, "Integrity checks stale or failing", watches a heartbeat that `links-data` pushes after each hourly run.
+
 # Probe from three locations every two minutes, count uptime in Probe-minutes, and alert from Grafana rules we own
 
 [ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md) probes the Canary link from two locations every minute, and [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md) alerts through Grafana's per-check `ProbeFailedExecutionsTooHigh` rule at "10 failures in 5 minutes". Grafana recommends "preferably three or more" locations for a check that alerts, and three at one-minute frequency is about 134k executions a month against the free 100k. The per-check rule is built by a closed-source backend, floors an extrapolated `increase()` per location, and reaches a threshold of 10 on only some evaluations of a total outage, so it may never fire. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) also leaves Synthetic Monitoring to be switched on by hand in the UI.

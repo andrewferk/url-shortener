@@ -49,6 +49,10 @@ _Avoid_: Disabled link, removed link, inactive link
 The deletion of a Link by the Operator, or by the service on the Operator's behalf, made for a stated reason. The Link becomes a Deleted link that records the Operator, not its Creator, as the one who deleted it.
 _Avoid_: Ban, block, removal
 
+**Redirect hijack**:
+A Short URL answering with anything other than what its Link says, without the Link having been deleted.
+_Avoid_: Link tampering, re-pointing
+
 **Abuse report**:
 A claim, from anyone, that a Link's Target URL is harmful, sent to the Deployment's abuse address. The Operator answers it; a confirmed report ends in a Takedown.
 _Avoid_: Complaint, flag

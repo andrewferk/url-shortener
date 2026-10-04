@@ -10,6 +10,8 @@ status: accepted
 >
 > Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): a registrar lock and auto-renew are required of every Operator. The advice to use Cloudflare Registrar is reversed: keep the registrar outside the prod Cloudflare account. `doctor` and the Status Worker read the Short domain's lock and expiry over RDAP.
 
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `infra/zone` publishes no CAA records. Certificate Transparency Monitoring is turned on by hand at bootstrap, so a mis-issued certificate is detected, not prevented.
+
 # A deployment is given its domain and owns a dedicated zone
 
 The project is headed for open source. It should run as its own service, be embeddable in another service, and not rule out a SaaS built on it. So no decision names a domain. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) already takes the Short domain as an input (`base_domain`, `preview_base_domain`) and derives every hostname from it. This ADR states what a deployment requires of that domain, and what it does to the zone.

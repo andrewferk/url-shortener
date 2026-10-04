@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): every object pushed off-account carries its signature as object metadata, and a rebuild verifies it. `offsite/` markers are signed, and an unsigned marker is ignored. The integrity heartbeat goes to Grafana, not `FLAGS`, because the `production` token can write `FLAGS`.
+
 # Keep a locked off-account copy of the change log, and state what every Operator must protect: the domain and the identity roots
 
 [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) accepted that "losing the whole prod account, or a compromised Operator token, can lose everything", and deferred the revisit to the first real Creator. Nothing scheduled it. Three things make it worth deciding now:

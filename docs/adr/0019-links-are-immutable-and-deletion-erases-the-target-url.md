@@ -4,6 +4,8 @@ status: accepted
 
 > Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): a deleted Link's Target URL leaves every copy in about four months, not three. The off-account copy is locked for 90 days and expires at 120.
 
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): compaction checks the invariant below, and on a violation alerts and stops that shard's compaction.
+
 # Links are immutable, and deleting a Link erases its Target URL
 
 Immutability was never decided on its own. [ADR 0006](./0006-redirect-caching-kv-values-colo-cache-no-store.md) called changing a Target URL or Expiry "off the table" because the caches had no invalidation story, and [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) built the change log on the premise that "a Link's fields never change", so replay merges entries in any order by "the deleted one wins". The PRD's [features review](https://github.com/andrewferk/url-shortener/issues/40#issuecomment-5942436020) found the cache reason weak (an edit would ride the same outbox and TTLs as a delete, about 90 s) and the log the real blocker, and asked for editing to be decided on its merits. The [security review](https://github.com/andrewferk/url-shortener/issues/40#issuecomment-5942073170) found the opposite gap: a Deleted link keeps its Target URL forever in the shard, the Creator list and the locked change log, and Target URLs often carry tokens or personal data.
