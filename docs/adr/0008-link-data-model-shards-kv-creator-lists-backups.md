@@ -20,6 +20,8 @@ status: accepted
 >
 > Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): losing the prod account, or every in-account backup, no longer loses everything. `links-data` pushes each daily, snapshot and `auth/` object to a compliance-locked bucket outside Cloudflare. `FLAGS` gains `offsite:<utc-date>`, and the bucket gains an unlocked `offsite/` prefix of markers. A rebuild from that copy has no reconcile, so up to about a day of Short codes can be reissued.
 
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): compaction checks ADR 0019's invariant and stops a shard's compaction on a violation. `links-data` signs every object it writes to the backup bucket, and compaction and restores skip an unsigned or wrongly signed object. An hourly Cron Trigger on `links-data` sweeps `LINKS` against the shards and counts Creator deletes. "Compaction must be monitored" is answered by a heartbeat to Grafana.
+
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) put every Link in one of 256 SQLite Durable Object shards, projected into Workers KV for Redirects and into one Durable Object per Creator for listing. This ADR fixes the shapes those three copies take and how they're kept recoverable.
