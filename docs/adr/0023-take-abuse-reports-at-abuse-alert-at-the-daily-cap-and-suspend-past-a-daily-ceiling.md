@@ -6,6 +6,8 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): a suspension takes effect within about 30 s, following ADR 0006's `cacheTtl`.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body no longer says `links-data` never binds `AUTH` (ADR 0024).
+
 # Take Abuse reports at `abuse@`, alert at the daily cap, and take down and suspend past a daily ceiling
 
 Abuse that gets the Short domain blocklisted or the Cloudflare account suspended is the cheapest way to destroy a deployment. Until now there was a takedown runbook and nothing else: no address to report to, no page saying what happens to a report, and no signal when a Creator hit [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s daily cap. That cap is soft. The burst limit counts per location, so a stolen key used from about 300 locations creates about 18,000 Links a minute, and the cap flag takes two to three minutes to land: 36,000 to 54,000 Links, all redirecting until the Operator notices. The only response was removing the Creator, who in that case is the victim.
@@ -64,7 +66,7 @@ Decided in [How does a deployment take in abuse reports and notice an abusive Cr
 
 - **A Suspended Creator can't use the Link API.** Every call answers [ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)'s uniform 401, as for a removed Creator. Its Links keep redirecting, and it keeps its keys.
 - **The suspension lives in the Creator object's `meta`,** with who made it (`operator` or `ceiling`), when, and the reason. The object mirrors it to `FLAGS` as `suspended:<creatorId>`, undated. The Link API reads that key after it has verified the credential.
-- **`creators suspend <id> --reason` and `creators resume <id>`** are Workflows in `links-data`, audited under `ops/` like every Operator operation. They call the Creator object, so the Operator and the ceiling suspend through one code path. `AUTH` is not touched, and `links-data` still never binds it.
+- **`creators suspend <id> --reason` and `creators resume <id>`** are Workflows in `links-data`, audited under `ops/` like every Operator operation. They call the Creator object, so the Operator and the ceiling suspend through one code path. `AUTH` is not touched. (`links-data` binds `AUTH` since ADR 0024, for the `AUTH` Workflows; suspension still doesn't use it.)
 - **A suspension takes effect within about 30 s:** the Link API reads `suspended:` with a `cacheTtl` of 30 s ([ADR 0006](./0006-redirect-caching-kv-values-colo-cache-no-store.md)).
 - **A resume doesn't undo the ceiling's Takedowns,** and Links still arriving from an over-ceiling day are still taken down.
 - **The Status Worker sends a "Creator over ceiling: suspended" email** when a `suspended:` key made by the ceiling appears. A suspension the Operator made sends nothing.

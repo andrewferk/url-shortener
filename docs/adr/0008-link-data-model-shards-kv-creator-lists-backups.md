@@ -24,6 +24,10 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the Creator ID `c` stays in `LINKS` values for good, since per-Creator analytics would need it. Without `WITHOUT ROWID`, a plain `TEXT PRIMARY KEY` would roughly double billed row writes (an inference, measured in slice 1.3). Editor on one Worker can bind any KV, R2 or D1 resource, as a documented fact. Durable Object calls use RPC methods.
 
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): the cost brake's flag is `brake:<utc-hour>`, not `brake:<utc-date>`, and it stops applying at the top of the hour.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the namespace table follows ADR 0022's `brake:<utc-hour>` and ADR 0024's `AUTH` writer and binding.
+
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) put every Link in one of 256 SQLite Durable Object shards, projected into Workers KV for Redirects and into one Durable Object per Creator for listing. This ADR fixes the shapes those three copies take and how they're kept recoverable.
@@ -102,11 +106,11 @@ CREATE TABLE outbox (
   | Namespace | Holds | Written by | Read by |
   |---|---|---|---|
   | `LINKS` | One value per Link | `links-data` (the outbox) | `redirect` |
-  | `AUTH` | [ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)'s `cred:<sha256>` and `creator:<id>` | The Operator CLI only | `redirect` |
-  | `FLAGS` | [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s `brake:<utc-date>` and `cap:<creatorId>:<utc-date>` | `redirect` (the brake), `links-data` (the daily cap) | `redirect` |
+  | `AUTH` | [ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)'s `cred:<sha256>` and `creator:<id>` | `links-data`, in the Operator's Workflows ([ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md)); the Operator CLI only, as first decided | `redirect` |
+  | `FLAGS` | [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s `brake:<utc-hour>` ([ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md)) and `cap:<creatorId>:<utc-date>` | `redirect` (the brake), `links-data` (the daily cap) | `redirect` |
 
-  - `links-data` never binds `AUTH`.
-  - Flag keys carry their UTC date, so "until midnight UTC" needs no cleanup. KV's native `expiration` garbage-collects these small keys.
+  - `links-data` binds `AUTH` to write it (ADR 0024). As first decided, it never bound `AUTH`.
+  - Flag keys carry their UTC date, or their UTC hour for the brake, so "until midnight UTC" needs no cleanup. KV's native `expiration` garbage-collects these small keys.
 - **`LINKS` keys are `<shard as 2 lowercase hex digits>:<Short code>`,** e.g. `07:Ab3xYz9`.
   - Listing one shard's keys is then a prefix list: about 4k list calls at peak instead of 1M. That's what makes a single-shard reconcile (below) affordable.
   - The Redirect Worker needs the shard number for its fallback anyway. Hashing before every read costs microseconds and no I/O.

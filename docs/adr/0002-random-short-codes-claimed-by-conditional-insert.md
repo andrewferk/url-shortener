@@ -14,6 +14,8 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): `.`, `/` and `+` are permanently excluded from Short codes and Custom aliases, because future routes depend on it.
 
+> Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): "not enumerable" means not sequential: knowing one Short code tells you nothing about the next. It never meant unguessable at scale, and guessing at the edge ceiling's rate is accepted. A Short code is not a secret.
+
 # Generate Short codes at random and rely on the shard's conditional claim, not a counter and bijection
 
 The original sketch generated Short codes from an incrementing counter passed through a keyed bijection, with a hash of the Target URL as a fallback. We don't do that. A generated Short code is 7 base62 characters drawn from a CSPRNG and proposed to `LinkRegistry.claim`, the atomic insert-if-absent on the owning Durable Object shard ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)). If the claim fails, the caller draws again. Custom aliases need that same claim anyway to guard the shared namespace, so random generation adds no machinery. A counter would add a strongly consistent counter, a leasing protocol, and a permanent secret key, and would still have to pass through the claim.

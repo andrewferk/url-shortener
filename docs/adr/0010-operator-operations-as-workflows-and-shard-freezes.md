@@ -14,6 +14,14 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Creator removal takes about 30 s to stop creates. Durable Object calls use RPC methods. Fan-out uses `createBatch` and a rerun uses `restart`. `workers_dev` and `preview_urls` are `false` on all three Workers. A Cost section states that Workflow steps are billed: a full reconcile at peak is about 1.02M steps, $4.19 over the included amount.
 
+> Amended by [ADR 0017](./0017-place-shards-and-creator-objects-by-a-required-location-hint.md): an Operator Workflow reaches shards and Creator objects through the one stub factory, so every `get()` passes the deployment's location hint. The restore runbook resets the recorded hint before a deleted namespace is replayed.
+
+> Amended by [ADR 0018](./0018-hash-the-case-folded-short-code-keep-aliases-case-sensitive-reserve-case-insensitive-mode.md): an operation that goes by Short URL computes the shard from the case-folded Short code. The per-shard reconcile is unchanged.
+
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `links-data` signs every object it writes to the backup bucket, `ops/` records included, and a restore skips an unsigned or wrongly signed object unless an override is given, which its audit record notes. A new Operator operation resumes a compaction that the invariant check stopped, naming the objects to drop or keep. The hourly `LINKS` sweep skips a frozen shard.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the audit record of an `AUTH` command follows ADR 0024.
+
 # Run Operator operations as Workflows in `links-data`, audit them in the backup bucket, and freeze shards during restores
 
 The shard and Creator Durable Objects live in `links-data`, which has no routes and deploys only through `production-admin` ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). There is no admin endpoint ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)). Yet the Operator must reach that data:
@@ -67,7 +75,7 @@ Decided in [How does the Operator reach Link data (takedowns, Creator removal, r
 - **`links-data` writes the audit record,** as the operation's first and last steps, to `ops/<yyyy-mm-dd>/<op_id>.json` in the backup bucket. Because the server writes it, a CLI bug can't skip it.
   - It holds the operation, its parameters, the reason, the start and end times, the counts, and any undo bookmark.
   - It's never retired, and it's locked for 90 days under a bucket lock on `ops/`, like `auth/`.
-- **Commands that write only `AUTH`,** which `links-data` never binds, write their audit record from the CLI to the same prefix.
+- **Commands that write only `AUTH`** are Workflows in `links-data` too ([ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md)), so `links-data` writes their audit records like any other. As first decided, `links-data` never bound `AUTH` and the CLI wrote these records.
 - **The change log already records *what* changed.** It shows `deleted_by='operator'` and `deleted_at`. The audit record adds *why*, and it covers operations that change no row.
 
 ### Takedowns

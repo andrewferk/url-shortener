@@ -11,7 +11,7 @@ The stored mapping from a Short code to a Target URL, optionally carrying an Exp
 _Avoid_: Short URL (as a name for the record), mapping, entry
 
 **Short code**:
-The case-sensitive key that identifies a Link in its short URL: 7 random base62 characters when generated. Unique within its Namespace, and never reused there once issued.
+The case-sensitive key that identifies a Link in its short URL: 7 random base62 characters when generated. Unique within its Namespace, and never reused there once issued. Only a disaster that loses the record of a Link can break this.
 _Avoid_: Slug, hash, key, token
 
 **Namespace**:
@@ -31,7 +31,7 @@ A Short code chosen by the Creator rather than generated: 3–32 characters of l
 _Avoid_: Vanity URL, custom slug
 
 **Target URL**:
-The URL a Link redirects to. Set when the Link is created and never changed, and erased when the Link is deleted.
+The URL a Link redirects to. Set when the Link is created and never changed, and erased when the Link is deleted. The one copy kept is in the Operator's record of a Takedown.
 _Avoid_: Long URL, original URL, destination URL
 
 **Expiry**:
@@ -81,9 +81,17 @@ _Avoid_: User, client
 One running instance of the service, run by one Operator, with its own Cloudflare account, Short domains and Namespaces.
 _Avoid_: Instance, install
 
+**Ops repo**:
+The repository an Operator runs one Deployment from. It holds that Deployment's configuration and credentials; the service's own repository holds neither.
+_Avoid_: Config repo, deploy repo
+
 **Link API**:
 The authenticated HTTP interface on the API subdomain through which Creators create, read, list and delete their own Links.
 _Avoid_: Admin API, management API
+
+**Operator CLI**:
+The command-line interface through which the Operator admits and removes Creators, takes down Links and restores data.
+_Avoid_: Admin API, admin tool
 
 **Redirect**:
 Answering a Visitor's request for a short URL: a 302 to the Target URL for a live Link, 410 Gone for an Expired or Deleted link, and 404 when no Link has that Short code in the Short domain's Namespace.
@@ -104,6 +112,10 @@ _Avoid_: Allowance
 **Redirect event**:
 The record of one Redirect: its Short code, outcome, and duration.
 _Avoid_: Hit, click (reserved for future click analytics)
+
+**Redirect flood**:
+Redirect volume, of every outcome, sustained above the rate the Operator has set as abnormal. It is a cost signal, not a verdict that the traffic is hostile.
+_Avoid_: Attack, spike, DDoS
 
 **Probe**:
 A synthetic Redirect request made from outside the service to measure uptime.

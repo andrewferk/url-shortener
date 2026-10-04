@@ -18,6 +18,10 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Cloudflare does record Worker errors below Enterprise (Workers Logs and Issues), with no email destination, so this ADR's alerts stay. `send_email` uses the current Email Service API. The alert address is an alias.
 
+> Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `links-data` emails the Operator its integrity findings itself, through its own `send_email` binding. A fourth Grafana rule we own, "Integrity checks stale or failing", joins ADR 0021's three, fed by a heartbeat `links-data` pushes after each hourly run.
+
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): two rules that lived only in the PRD are stated here: an alert sends its email before it writes alert state, and no email a Worker sends the Operator carries a link. The executions table and the latency Objective's eligible outcomes follow ADRs 0021 and 0022.
+
 # Report three rolling 30-day Objectives from additive rollup counts, and alert the Operator by email from both Grafana and the Status Worker
 
 [ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md) defined what the Status page measures but left open what it reports against. The service now has three **Objectives**, each over a rolling 30 days: uptime from Probe-minutes, and Redirect latency and error rate from Redirect events. The two request-based Objectives are ratios, not percentiles, so each has an **Error budget** that can be counted. The rollups store additive counts, and 30-day figures are summed from D1. Alerts go to the Operator by email, with no paging. Grafana sends the ones that must work while Cloudflare is down, and the Status Worker sends the ones that need Analytics Engine data.
@@ -35,7 +39,7 @@ Decided in [What SLOs does the Status page report against?](https://github.com/a
   | Redirect latency | eligible Redirects with `duration_ms` ≤ 200 | 99% | 1% of eligible Redirects |
   | Error rate | eligible Redirects that don't answer 5xx | 99.9% | 0.1% of eligible Redirects |
 
-- **Eligible Redirects** are Visitor Redirects (`source=visitor`) that performed a lookup: outcomes `kv-hit`, `shard-fallback`, `not-found`, `gone` and `error`. These are left out of both the numerator and the denominator:
+- **Eligible Redirects** are Visitor Redirects (`source=visitor`) that performed a lookup: outcomes `kv-hit`, `shard-fallback`, `not-found`, `gone` and `error`. For the latency Objective alone, `not-found` is not eligible ([ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md)). These are left out of both the numerator and the denominator:
   - Probes, which are uptime's job. They stay in ADR 0003's percentile charts.
   - `malformed` and `rate-limited` ([ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)), which answer instantly and would pad the good count during a flood.
   - `shed`, the cost brake's 503. It is deliberate load-shedding, mostly aimed at guessers, and it gets its own alert. If it counted, anyone flooding unknown Short codes could spend the error budget.
@@ -77,6 +81,8 @@ Decided in [What SLOs does the Status page report against?](https://github.com/a
     - There is no slow-burn alert. The page shows slow burn.
     - It sends through the `send_email` binding, now part of Cloudflare Email Service, with the structured `send({ to, from, subject, text })` call. The raw-message `EmailMessage` API is labelled legacy and isn't used. The binding's `destination_address` restricts it to the Operator's verified address, and sending to a verified address is free on every plan.
     - Alert state lives in D1. Each condition sends one email when it starts firing and one when it resolves. The cost-brake alert sends once per UTC day.
+    - **An alert sends its email first and writes its alert state second,** so a failed run can duplicate an alert and never loses one.
+    - **No email a Worker sends the Operator carries a link.** The alert address is an alias committed in a public ops repo, so an alert with a link is a phishing template ([ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)). An email names its runbook or dashboard page in words. Where it must name a Short URL or an object key, as ADR 0026's findings do, that is an identifier to look up, not a link to follow.
 - **Where it lives** ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)):
   - `infra/zone`: Email Routing on the zone and the Operator's verified destination address.
   - `infra/env`, when `probes_enabled`: the Grafana contact point, the notification policy, `grafana_synthetic_monitoring_check_alerts` on the Canary link check, and the Status page check.
@@ -91,9 +97,11 @@ $0 extra.
 
   | Check | Executions |
   |---|---|
-  | Probes | 89,280 |
-  | Status page check | 4,464 |
-  | **Total** | **about 93.7k** |
+  | Probes, 3 locations every 2 minutes | 66,960 |
+  | Status page check, 2 locations every 10 minutes | 8,928 |
+  | **Total** | **about 75.9k** |
+
+  These are [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)'s figures. As first decided, two locations every minute came to about 93.7k.
 
 ## Considered options
 

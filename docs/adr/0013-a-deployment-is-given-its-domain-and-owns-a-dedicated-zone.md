@@ -12,6 +12,8 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): `infra/zone` publishes no CAA records. Certificate Transparency Monitoring is turned on by hand at bootstrap, so a mis-issued certificate is detected, not prevented.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's CAA bullet follows ADR 0026.
+
 # A deployment is given its domain and owns a dedicated zone
 
 The project is headed for open source. It should run as its own service, be embeddable in another service, and not rule out a SaaS built on it. So no decision names a domain. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) already takes the Short domain as an input (`base_domain`, `preview_base_domain`) and derives every hostname from it. This ADR states what a deployment requires of that domain, and what it does to the zone.
@@ -54,7 +56,7 @@ Decided in [What does a deployment require of its domain?](https://github.com/an
 These are defaults in `infra/zone`. They cost nothing.
 
 - **DNSSEC** on. It is one click with Cloudflare Registrar. With any other registrar, the operator adds the DS record there.
-- **CAA** records allow only the certificate authorities that Universal SSL uses.
+- **No CAA records** (ADR 0026). This ADR first allowed only the certificate authorities that Universal SSL uses, but Cloudflare changes authority without notice and a stale record can block a renewal. Certificate Transparency Monitoring is turned on by hand instead.
 - **HTTPS only:**
   - Always Use HTTPS;
   - an HSTS header on every response, `max-age` one year, with `includeSubDomains`.
