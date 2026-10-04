@@ -10,6 +10,8 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): Logpush of audit logs is no longer Enterprise-only (self-service on Free, 25 GB a month included; the audit dataset on Free is inferred). Data Studio SQL is logged in Audit Logs v1. The digest carries no links, and goes to an alias.
 
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the execution headroom cited against a separate Worker follows ADR 0021.
+
 # Watch Audit Logs v2 from the Status Worker for destructive changes, and email the Operator a digest
 
 Cloudflare sends no alert when a Worker, KV namespace, D1 database, R2 bucket or DNS record is deleted ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). The guards so far protect against *OpenTofu* deleting things:
@@ -133,7 +135,7 @@ $0 extra.
 - **Report every event, or drop all events from CI and Operator tokens.** The first makes preview teardowns noise. The second hides a stolen CI or Operator token, which is exactly the case worth an email.
 - **Match preview resources by their `pr-<n>` name.** Delete events usually carry an ID, not a name.
 - **Watch rulesets, routes and zone settings too.** They change on every merge, and a bad change already shows up as failing Probes.
-- **A new Worker with no routes and its own Cron Trigger.** It would need its own `send_email`, its own state, and its own external watchdog, which Grafana's roughly 6k of monthly execution headroom can barely afford.
+- **A new Worker with no routes and its own Cron Trigger.** It would need its own `send_email`, its own state, and its own external watchdog, which Grafana's roughly 6k of monthly execution headroom could barely afford (about 24k since ADR 0021).
 - **A scheduled GitHub Actions job.** GitHub's cron runs late and can be dropped, and the job would put another Cloudflare credential in GitHub.
 - **Cloudflare Notifications or Logpush.** No Notification type covers audit events. Logpush is no longer Enterprise-only: it is self-service on Free, with 25 GB a month included. That the `audit_logs_v2` dataset can be selected on a Free account is inferred, not stated. [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md) decides it still isn't used.
 - **Adding Account Settings Read to the Analytics Engine read token.** Previews reuse that token, so every preview would hold it.

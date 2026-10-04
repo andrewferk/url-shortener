@@ -4,7 +4,7 @@ status: accepted
 
 > Amended by [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md): `shard-fallback` stays eligible for the latency Objective; `not-found` no longer is.
 
-> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's eligibility lines follow ADR 0022.
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's eligibility lines, including the section heading and the Consequences line, follow ADR 0022.
 
 # Place shards and Creator objects by a required location hint, with optional hints for D1 and R2 and no jurisdiction
 
@@ -79,7 +79,7 @@ A round trip is roughly 80–150 ms between North America and Europe, and 200–
 - **The one legitimate change follows a restore that recreates the objects.** After `links-data`'s namespace is deleted and replayed (ADR 0008), every shard and Creator object is placed afresh. The restore runbook covers resetting the recorded value first.
 - **A recreated R2 bucket keeps its first location.** Cloudflare honours the hint only "the first time a bucket with a given name is created".
 
-### The latency Objective is unchanged
+### The latency Objective keeps the slow path
 
 - **`shard-fallback` stays eligible, and `not-found` did until ADR 0022 removed it,** for [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)'s latency Objective (99% of eligible Redirects in ≤ 200 ms).
   - They are real Visitor experiences: a new Link's first minute, and a mistyped Short URL. Leaving them out would hide exactly the cost that placement creates.
@@ -110,7 +110,7 @@ Slice 1.3 ships the stub factory, the `location_hints` schema and the changed-va
 
 - **Amends ADR 0001:** there is one region to choose, for the Durable Objects, and two optional ones.
 - **Amends ADR 0008:** every `get()` of `shard-<n>` and of a Creator's object passes the deployment's hint, through one stub factory.
-- **Amends ADR 0011:** eligibility is unchanged, and the latency Objective now depends on where the Operator placed the shards.
+- **Amends ADR 0011:** this ADR leaves eligibility as it was ([ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md) later took `not-found` out of the latency Objective), and the latency Objective now depends on where the Operator placed the shards.
 - **Amends ADR 0016:** `deployment.json` gains `location_hints`; the `admin` job touches all 256 shards; the `plan` job fails on a changed hint.
 - **Amends [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md):** the D1 database and every R2 bucket are created with the deployment's hint when one is given.
 - **Choosing a region is a one-time decision for each Operator,** made before the first deploy. A deployment with Visitors on every continent will always have some far from its shards. The KV read path is what keeps that off almost every Redirect.

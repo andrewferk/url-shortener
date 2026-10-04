@@ -18,7 +18,7 @@ status: accepted
 
 > Amended by [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md): the Status Worker also reads `offsite:<utc-date>` keys in `FLAGS` for the "Off-account copy stale" email, and looks the Short domain up over RDAP daily.
 
-> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the Probe count follows ADR 0021, and "depends on neither KV nor the shards" is narrowed to serving the page.
+> Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the Probe count, locations and frequency follow ADR 0021, and "depends on neither KV nor the shards" is narrowed to serving the page.
 
 # Feed the Status page from self-timed Redirect events and external Probes, served by a separate Status Worker
 
@@ -37,7 +37,7 @@ Decided in [How does the Status page get its metrics and where is it served?](ht
   - **Percentiles:** p50/p90/p99 come from `quantileExactWeighted`, weighted by `weight`.
 - **Volume** counts Visitor Redirects, broken down by outcome, and leaves out Probes. **Error rate** (the 5xx share of Visitor Redirects) is a separate series. It doesn't count toward uptime.
 - **Uptime** comes from Probes run by Grafana Cloud Synthetic Monitoring.
-  - Two locations follow the Canary link every minute. A minute counts as down when every location fails.
+  - Three Probe locations follow the Canary link every 2 minutes ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)). Each run stands for the Probe-minutes of its interval. A window is down when at least two locations reported and every report failed.
   - Probe Redirects run the real Redirect path, so their Redirect events count toward the latency percentiles. They're tagged `source=probe`, so they can be filtered out later.
   - **Probe round-trip latency** is measured from outside, including network, and is shown as its own series. It is never blended with server-side latency.
 - **Canary link:** a Link with the Custom alias `canary` and no Expiry. An idempotent post-deploy step creates it through the normal Link creation API, as an operations Creator, in prod and in every preview environment. The Worker recognizes it only to tag its Redirect events as `probe`.
