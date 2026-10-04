@@ -10,6 +10,8 @@ status: accepted
 
 > Amended by [ADR 0026](./0026-detect-redirect-hijacks-from-links-data-and-the-ops-repo.md): the weekly drift job becomes an hourly integrity job (`drift_schedule`). It also lists the live deployments of all three Workers and fails when a live version isn't the one the last deploy run recorded in a GitHub deployment record, which every deploy run now writes as its last step.
 
+> Amended by [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md): previews write GitHub deployment records, which the teardown's `find` job, the cap of 5 and the 7-day rule read in place of run history; `release.yml` runs CI itself before tagging; the `preview` status is accepted as perishable. Plan summaries show before and after values. The secret contract gains the optional `STATE_PASSPHRASE_PREVIOUS` and `deploy.yml` a `reencrypt` input. `wrangler.base.jsonc` carries `exports`. Read-only planning falls back to a read-write state key if its spike fails.
+
 # Deliver through reusable workflows called from each ops repo: plan read-only, apply behind at most one approval, and drill restores in a throwaway environment
 
 [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md) puts every deployment in its own ops repo, which calls this repo's reusable workflows at a pinned ref and holds the `production`, `production-admin` and `preview` GitHub environments. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) fixes what each credential can do and that `production-admin` and `preview` need the Operator's approval. This ADR decides the pipeline between them.
