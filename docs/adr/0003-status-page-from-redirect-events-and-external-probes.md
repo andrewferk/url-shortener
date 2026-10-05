@@ -20,6 +20,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the Probe count, locations and frequency follow ADR 0021, and "depends on neither KV nor the shards" is narrowed to serving the page.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the Status Worker no longer reads `offsite:<utc-date>` or sends the "Off-account copy stale" email. A Grafana rule we own raises it.
+
 # Feed the Status page from self-timed Redirect events and external Probes, served by a separate Status Worker
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us no edge latency percentiles, no per-request edge log, and no health checks. So the Worker measures each Redirect itself and writes a Redirect event to Workers Analytics Engine. Uptime comes from Probes run by an external service. A separate Status Worker rolls both sources up into D1 every 5 minutes and serves precomputed snapshots. Because the page depends on the Worker seeing every Redirect, **every Redirect runs the Worker**: Redirects are never served from Workers Cache. The saving would be small anyway, since cache hits are still billed as Workers requests.

@@ -16,6 +16,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the drift plan is hourly in the body too, and the read-only claim cites ADR 0024. The status App's private key joins the yearly rotation; it had none. The body also follows ADR 0027 (`exports`, plan summaries with values, the release gate running CI) and ADR 0024 (`production-plan`'s permissions).
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the hourly integrity job also lists the zone's rulesets and Workers Routes and fails on one that isn't declared. The `plan` job also plans the hand-applied backup bucket and Email Routing configurations. `doctor` gains three checks: `production-plan` lists rulesets in every phase, `production` can deploy `status` with its `send_email` binding, and each R2 bucket's location beside its hint.
+
 # Deliver through reusable workflows called from each ops repo: plan read-only, apply behind at most one approval, and drill restores in a throwaway environment
 
 [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md) puts every deployment in its own ops repo, which calls this repo's reusable workflows at a pinned ref and holds the `production`, `production-admin` and `preview` GitHub environments. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) fixes what each credential can do and that `production-admin` and `preview` need the Operator's approval. This ADR decides the pipeline between them.
@@ -92,7 +94,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 ### Prod: `deploy.yml`
 
 1. **`build`** (no secrets): bundles each Worker and records its hash.
-2. **`plan`** (`production-plan`): both plans, the `links-data` bundle hash compared with the deployed version's tag, and pending D1 migrations.
+2. **`plan`** (`production-plan`): both plans, plans of the hand-applied backup bucket and Email Routing configurations ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)), the `links-data` bundle hash compared with the deployed version's tag, and pending D1 migrations.
 3. **`admin`** (`production-admin`), **only if something is pending:** apply the saved `env/prod` plan, then D1 migrations, then `links-data` with `--tag <sha>`. Most deploys skip it and need no approval. When one doesn't, the Operator approves a plan already shown in `plan`'s summary. A saved plan that has gone stale fails to apply.
 4. **`prod`** (`production`): apply the saved zone plan, render, then deploy `redirect` and `status` with `--secrets-file` and `--tag <sha>`. Then the Canary link step, and a smoke test for up to 90 s:
    - the apex's Canary link Short URL answers 302 to its Target URL;
@@ -148,7 +150,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
   - Full plans exist only as encrypted plan artifacts. They are kept for 1 day and deleted by the job that applies them. The runbook shows how to `tofu show` one locally with the passphrase.
 - **Wrangler's output is left as it is:** version IDs and routes.
 - **The ops repo keeps run logs for 30 days.**
-- **Drift:** an hourly scheduled plan (`drift_schedule`, ADR 0026; weekly as first decided) in `production-plan` with `-detailed-exitcode` fails on any drift, so GitHub emails the Operator.
+- **Drift:** an hourly scheduled plan (`drift_schedule`, ADR 0026; weekly as first decided) in `production-plan` with `-detailed-exitcode` fails on any drift, so GitHub emails the Operator. The same job lists the zone's rulesets and Workers Routes and fails on one that isn't declared (ADR 0029).
 
 ### Restore drills
 

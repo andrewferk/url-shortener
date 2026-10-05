@@ -12,6 +12,8 @@ status: accepted
 
 > Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a forged delete is recovered by a Void for about three months, not by point-in-time recovery, which re-applies the delete. The shard's `void` method is gated.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the backup bucket configuration takes `location_hints.r2` and `prevent_destroy`, and the pull request's `plan` job plans it. Email Routing becomes a second hand-applied configuration, so `production` loses its Email Routing permissions. `production-plan` gains Workers Routes Read.
+
 # State what each credential can do to Link data, gate Operator methods with a secret, move `AUTH` writes into `links-data`, and take the backup locks out of CI's reach
 
 [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) says "nothing that runs unattended in prod can delete anything". It reasons about API-token permissions, and it is false for data. A token that can deploy a Worker controls everything that Worker can bind, and three Cloudflare facts mean a binding can't be fenced:
@@ -76,6 +78,8 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 - **Its state lives in the prod state bucket under its own key,** encrypted with the prod passphrase. It holds no secret, and `production-plan` can then plan it.
 - **`production-admin` drops R2 edit.** `env/prod` takes the bucket's name as an input and binds it to `links-data`.
 - **`production-plan` gains R2 read** and plans this configuration in the hourly integrity job (the weekly drift job until ADR 0026), so a changed or missing lock still fails the plan.
+- **The configuration takes `location_hints.r2`, records it the first time it is applied, and carries `prevent_destroy`** ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)). The pull request's `plan` job plans it too, so a changed hint fails before merge.
+- **Email Routing is a second hand-applied configuration** (ADR 0029), with its own state key. `production` drops its Email Routing permissions.
 - **Previews are unchanged.** `infra/env` still creates a preview's bucket, which has no lock.
 - **KV namespaces and the Status database stay in `env/prod`.** `LINKS` rebuilds from the shards, `AUTH` restores from the bucket, and the Status database holds only rollups.
 

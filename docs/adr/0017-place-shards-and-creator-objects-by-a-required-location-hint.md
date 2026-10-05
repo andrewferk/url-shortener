@@ -6,6 +6,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's eligibility lines, including the section heading and the Consequences line, follow ADR 0022.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): prod's hand-applied backup bucket configuration takes `location_hints.r2`, records it and carries `prevent_destroy`, and the `plan` job plans it. The state buckets' hint is unchecked, which is accepted.
+
 # Place shards and Creator objects by a required location hint, with optional hints for D1 and R2 and no jurisdiction
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) said "there are no regions to choose". That holds for the Workers, but not for what they store. Cloudflare creates a Durable Object "close to where the initial `get()` request is made", and objects "do not currently change locations after they are created". [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) made the object names permanent and no ADR passed a `locationHint`, so each of the 256 shards would have landed, for good, near whichever Visitor, bot, Creator or CI run reached it first. A Creator's object is first reached by a shard's outbox alarm, so it would have landed near that shard.
@@ -75,8 +77,10 @@ A round trip is roughly 80–150 ms between North America and Europe, and 200–
 
 - **Changing a hint moves nothing.** Existing objects, databases and buckets stay where they are. A changed `durable_objects` hint would only place new Creator objects somewhere else than the shards.
 - **The deploy refuses a changed hint.** `infra/env` records each hint the first time it is applied, and the `plan` job fails when `deployment.json` differs from the recorded value. An omitted `d1` or `r2` is recorded as omitted.
-- **Whether the provider would replace a D1 database or an R2 bucket whose hint changed is not documented.** The check fails the plan before that is ever proposed, so the Status page's history and the locked backup bucket don't depend on the answer.
+- **Prod's backup bucket has its own check.** Its hand-applied configuration (ADR 0024) takes `location_hints.r2` and records it the same way, and the `plan` job plans that configuration too ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)).
+- **Whether the provider would replace a D1 database or an R2 bucket whose hint changed is not documented.** The check fails the plan before that is ever proposed, so the Status page's history and the locked backup bucket don't depend on the answer. The backup bucket also carries `prevent_destroy` (ADR 0029).
 - **The one legitimate change follows a restore that recreates the objects.** After `links-data`'s namespace is deleted and replayed (ADR 0008), every shard and Creator object is placed afresh. The restore runbook covers resetting the recorded value first.
+- **The state buckets' hint is unchecked.** The bootstrap checklist creates them with the hint, and no state records it. `doctor` reports each bucket's actual location beside the hint (ADR 0029).
 - **A recreated R2 bucket keeps its first location.** Cloudflare honours the hint only "the first time a bucket with a given name is created".
 
 ### The latency Objective keeps the slow path

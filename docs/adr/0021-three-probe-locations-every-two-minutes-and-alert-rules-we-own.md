@@ -6,6 +6,8 @@ status: accepted
 
 > Amended by [ADR 0027](./0027-declare-durable-objects-with-exports-keep-gates-off-run-history-and-harden-state-encryption.md): the Synthetic Monitoring state's passphrase is 32 random bytes, with `enforced` set.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): a fifth Grafana rule we own, "Off-account copy stale", reads the time of the last complete off-account copy from `links-data`'s heartbeat.
+
 # Probe from three locations every two minutes, count uptime in Probe-minutes, and alert from Grafana rules we own
 
 [ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md) probes the Canary link from two locations every minute, and [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md) alerts through Grafana's per-check `ProbeFailedExecutionsTooHigh` rule at "10 failures in 5 minutes". Grafana recommends "preferably three or more" locations for a check that alerts, and three at one-minute frequency is about 134k executions a month against the free 100k. The per-check rule is built by a closed-source backend, floors an extrapolated `increase()` per location, and reaches a threshold of 10 on only some evaluations of a total outage, so it may never fire. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) also leaves Synthetic Monitoring to be switched on by hand in the UI.
@@ -47,7 +49,7 @@ Decided in [How many Probe locations, and which alert rule, does the uptime Obje
 
 ### Alert rules
 
-Three Grafana-managed rules in one `grafana_rule_group`, in `infra/env` when `probes_enabled`. They replace `grafana_synthetic_monitoring_check_alerts`. All go to ADR 0011's email contact point, and the notification policy routes on a label these rules carry instead of `namespace=synthetic_monitoring`.
+Three Grafana-managed rules in one `grafana_rule_group`, in `infra/env` when `probes_enabled`. ADR 0026 adds a fourth to the group and [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md) a fifth. They replace `grafana_synthetic_monitoring_check_alerts`. All go to ADR 0011's email contact point, and the notification policy routes on a label these rules carry instead of `namespace=synthetic_monitoring`.
 
 | Rule | Fires when |
 |---|---|

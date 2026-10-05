@@ -30,6 +30,8 @@ status: accepted
 
 > Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a tombstone carries `deleted_at` and `deleted_by`, so a shard rebuilt from `LINKS` keeps them. The merge rule is "the deleted one wins, unless that delete is voided", with void records under `log/void/`. The reconcile deletes a live row whose `LINKS` value is a tombstone. The bucket gains an unlocked `review/` prefix for the rollback review file.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): `FLAGS` no longer holds `offsite:<utc-date>`. The bucket's `offsite/` prefix gains a signed `last-complete` record.
+
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) put every Link in one of 256 SQLite Durable Object shards, projected into Workers KV for Redirects and into one Durable Object per Creator for listing. This ADR fixes the shapes those three copies take and how they're kept recoverable.

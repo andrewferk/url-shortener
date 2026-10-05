@@ -34,6 +34,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body now carries what ADRs 0010, 0011, 0016, 0021, 0024, 0026 and 0027 changed: the recoverability claim, `exports`, OpenTofu 1.13.x, the Probe count, and the credentials table, which gains `production-plan`. The parameters table gains the inputs of ADRs 0022 and 0023, the `status` row lists its later bindings, and Synthetic Monitoring is installed by OpenTofu (ADR 0021).
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): Email Routing moves from `infra/zone` to a hand-applied configuration in `infra/bootstrap`, so the `production` token drops its Email Routing permissions. `production-plan` gains Workers Routes Read, and the hourly integrity job lists the zone's rulesets and Workers Routes. `creators add` reads a signed `offsite/last-complete` record, not a `FLAGS` key.
+
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 
 Cloudflare has no lock, trash or restore for a deleted Worker, KV namespace, D1 database or Durable Object namespace. Deleting a Worker also deletes the Durable Object namespaces it implements, so under [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)'s single Worker, one wrong delete loses every Link and tombstone. So the layout is designed around what each credential *can* destroy.
@@ -98,7 +100,8 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - the Cloudflare API tokens;
   - creating each Worker once (only product-level Admin can create a Worker);
   - the Grafana stack, with Synthetic Monitoring installed by a hand-applied OpenTofu configuration that lives here ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)), not switched on in the UI;
-  - the Status Worker's two read tokens.
+  - the Status Worker's two read tokens;
+  - prod's backup bucket (ADR 0024) and Email Routing ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)), each a hand-applied OpenTofu configuration that lives here.
 - **`infra/zone`:** one state per Cloudflare account, holding everything that exists once per zone or account:
   - zone settings and all rulesets;
   - DNS records that belong to no environment.
@@ -173,9 +176,9 @@ Each set of credentials is kept in a separate GitHub environment. Cloudflare API
 
 | GitHub environment | Runs | Cloudflare token can | Approval |
 |---|---|---|---|
-| `production` (from `main` only) | Deploys `redirect` and `status`, applies `infra/zone`, and creates the Canary link (OIDC `environment=production`) | Edit `redirect` and `status` only. Workers Routes, rulesets, zone settings, Email Routing (ADR 0011), and Bot Management Write so it can turn Bot Fight Mode off. **No KV, D1 or Workers Admin**, so it can't delete a Worker or any data through the API. | None |
+| `production` (from `main` only) | Deploys `redirect` and `status`, applies `infra/zone`, and creates the Canary link (OIDC `environment=production`) | Edit `redirect` and `status` only. Workers Routes, rulesets, zone settings, and Bot Management Write so it can turn Bot Fight Mode off. No Email Routing (ADR 0029). **No KV, D1 or Workers Admin**, so it can't delete a Worker or any data through the API. | None |
 | `production-admin` (from `main` only) | Applies `env/prod`, deploys `links-data` and runs D1 schema migrations | Edit `links-data`. KV, D1, DNS; no R2 edit (ADR 0024). The Grafana Synthetic Monitoring token and stack token (ADRs 0016, 0021), and the Grafana write token that `links-data` holds for its heartbeat (ADR 0026). | The Operator approves each run |
-| `production-plan` (from `main` only; [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md)) | Plans `infra/zone` and `env/prod`, and runs the hourly integrity job (ADR 0026) | Read only: Metadata Read-Only on Workers, and R2 read (ADR 0024). | None |
+| `production-plan` (from `main` only; [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md)) | Plans `infra/zone` and `env/prod`, and runs the hourly integrity job (ADR 0026) | Read only: Metadata Read-Only on Workers, R2 read (ADR 0024) and Workers Routes Read (ADR 0029). | None |
 | `preview` | Applies `env/pr-<n>`, deploys and tears down previews | Workers Admin, KV, D1, DNS and Workers Routes in the account the previews live in. No rulesets or zone settings. | The Operator approves each run (single-account phase) |
 
 - **A token's permissions don't bound what its Worker can bind.** Cloudflare documents that Editor on one Worker is enough to deploy it with bindings to any KV, R2 or D1 resource: "You do not need separate permissions on the bound resources to deploy the Worker." So "No KV, D1" above describes the token's own API calls, not the data its Worker can reach. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) restates the claim on that basis.
