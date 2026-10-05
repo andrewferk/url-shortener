@@ -20,6 +20,8 @@ status: accepted
 
 > Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): `links-data`'s tag is its bundle hash, not the commit SHA, and `plan` reads it from the live version's `workers/tag` annotation. The `admin` job touches the shards by starting a `touch-shards` Workflow in `links-data` and polling it. The deployment record also holds `links-data`'s bundle hash.
 
+> Amended by [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md): the cross-account secrets spike gets its outcome (bare names, then names declared under `on.workflow_call.secrets`, then composite actions with the workflows copied into each ops repo) and runs first in slice 1.4. Whether `--secrets-file` removes a hand-set secret is a spike too; if it does, `links-data` deploys without the flag and takes its secrets from `wrangler secret bulk`. The failed-check fallbacks cover Audit Logs v1.
+
 # Deliver through reusable workflows called from each ops repo: plan read-only, apply behind at most one approval, and drill restores in a throwaway environment
 
 [ADR 0015](./0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md) puts every deployment in its own ops repo, which calls this repo's reusable workflows at a pinned ref and holds the `production`, `production-admin` and `preview` GitHub environments. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) fixes what each credential can do and that `production-admin` and `preview` need the Operator's approval. This ADR decides the pipeline between them.
@@ -45,7 +47,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 | `restore-drill.yml` | monthly schedule, dispatch | Every ADR 0008 restore in a throwaway environment |
 
 - **One input, `config-path`,** defaulting to `deployment.json`.
-- **Secrets are a documented contract of fixed names.** A job that names an `environment` reads that ops-repo environment's secrets directly, since callers can't pass environment secrets. The names are `CLOUDFLARE_API_TOKEN`, `STATE_R2_KEY_ID`, `STATE_R2_SECRET`, `STATE_PASSPHRASE` and the Status Worker's read tokens.
+- **Secrets are a documented contract of fixed names.** A job that names an `environment` reads that ops-repo environment's secrets directly, since callers can't pass environment secrets. That it does so across accounts is the first spike below; [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md) holds what the contract becomes if it doesn't. The names are `CLOUDFLARE_API_TOKEN`, `STATE_R2_KEY_ID`, `STATE_R2_SECRET`, `STATE_PASSPHRASE` and the Status Worker's read tokens.
 - **Repo-level secrets are passed explicitly,** because `secrets: inherit` doesn't cross personal accounts. The only one is the status App's private key. It joins ADR 0024's yearly rotation: the Operator generates a new key in the App's settings, swaps the secret and deletes the old key.
 - **Code is checked out at `job.workflow_sha`,** never at a second ref the caller supplies.
 - **Every caller sets `cache-mode: none`, and nothing restores a cache.** `workflow_dispatch` and `schedule` runs write to the default branch's cache scope, so untrusted build code could otherwise poison the cache a prod deploy restores.
@@ -97,7 +99,7 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
 
 1. **`build`** (no secrets): bundles each Worker and records its hash.
 2. **`plan`** (`production-plan`): both plans, plans of the hand-applied backup bucket and Email Routing configurations ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)), the `links-data` bundle hash compared with the live version's `workers/tag` annotation ([ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md)), and pending D1 migrations.
-3. **`admin`** (`production-admin`), **only if something is pending:** apply the saved `env/prod` plan, then D1 migrations, then `links-data` with `--tag <bundle hash>`, then the `touch-shards` Workflow, started over the Workflows REST API and polled until it ends (ADR 0017, ADR 0031). Most deploys skip it and need no approval. When one doesn't, the Operator approves a plan already shown in `plan`'s summary. A saved plan that has gone stale fails to apply.
+3. **`admin`** (`production-admin`), **only if something is pending:** apply the saved `env/prod` plan, then D1 migrations, then `links-data` with `--tag <bundle hash>` and `--secrets-file` (or, if the spike finds the flag removes the hand-set signing key, without it and followed by `wrangler secret bulk`; ADR 0032), then the `touch-shards` Workflow, started over the Workflows REST API and polled until it ends (ADR 0017, ADR 0031). Most deploys skip it and need no approval. When one doesn't, the Operator approves a plan already shown in `plan`'s summary. A saved plan that has gone stale fails to apply.
 4. **`prod`** (`production`): apply the saved zone plan, render, then deploy `redirect` and `status` with `--secrets-file` and `--tag <commit SHA>`. Then the Canary link step, and a smoke test for up to 90 s:
    - the apex's Canary link Short URL answers 302 to its Target URL;
    - `status.` answers 200;
@@ -192,10 +194,11 @@ This repo exports four, one per trigger shape. Each has a caller in `examples/op
   - toggling a preview bucket's lock appears in Audit Logs v2. R2's list of logged actions omits it.
   - which changes Audit Logs v2 actually records, since Cloudflare publishes no coverage list. In a preview environment `doctor` deploys and rolls back a version, adds and removes a route, changes an Email Routing rule, writes a KV key through REST, toggles a bucket lock, and runs one Data Studio statement and one `query/v2` call, then reports which appear in v2 and in v1.
   - the `production` token can read `GET /zones/{zone_id}/bot_management`. Whether an account-owned token works on that endpoint is not documented.
-- **Two facts need a spike, not `doctor`,** because they are about GitHub and the same for every Operator:
-  - whether a caller in another account resolves environment secrets by name inside a reusable workflow. [actions/runner#4453](https://github.com/actions/runner/issues/4453) reports them unreachable, in a same-repo case that one commenter disputes, and it is open with no maintainer reply. The spike uses two throwaway public repos under two personal accounts.
+- **Three facts need a spike, not `doctor`,** because they are about GitHub or Wrangler and the same for every Operator:
+  - whether a caller in another account resolves environment secrets by name inside a reusable workflow. [actions/runner#4453](https://github.com/actions/runner/issues/4453) reports them unreachable, in a same-repo case that one commenter disputes, and it is open with no maintainer reply. The spike uses two throwaway public repos under two personal accounts, and runs as the first act of slice 1.4, before any workflow is written. It tries bare names, then the fixed names declared as optional under `on.workflow_call.secrets`; the first that works is the design. If both fail, this repo ships composite actions and each ops repo copies the workflows from `examples/ops-repo/` (ADR 0032).
   - Dependabot's handling of a `main` SHA pin (above).
-- **Each failed check prints its documented fallback:** Editor over all Workers (ADR 0010), or ADR 0008's accepted risk (ADR 0012).
+  - whether a deploy with `--secrets-file` removes a secret the file doesn't name, on a throwaway Worker (ADR 0032). `doctor` repeats it against a preview's `links-data`, never prod's.
+- **Each failed check prints its documented fallback:** Editor over all Workers (ADR 0010), or ADR 0008's accepted risk (ADR 0012). For Audit Logs v1 it is a narrower permission, then the hourly Email Routing listing (ADR 0032).
 - **No design here depends on whether one approval covers several jobs waiting on the same environment.** Each run has at most one approved job per environment.
 
 ### The account split

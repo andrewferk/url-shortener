@@ -12,6 +12,8 @@ status: accepted
 
 > Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): the deployment record also holds `links-data`'s bundle hash, and the hourly integrity job fails when the live `workers/tag` differs from it. The version ID comparison stays the hijack check.
 
+> Amended by [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md): the two `doctor` checks without an outcome get one. `--secrets-file` is also a spike, `doctor` runs it only in a preview, and the signing key stays in place whichever way it falls. `audit-read` without Audit Logs v1 falls back to a narrower permission, then to listing Email Routing hourly with Data Studio SQL an accepted gap.
+
 # Detect Redirect hijacks from `links-data` and the ops repo: sweep `LINKS` against the shards, sign the change log, and compare the live zone and Workers with `main` every hour
 
 Rewriting where Short URLs go is the highest-value attack on a shortener, and nothing in the design would notice it. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) says the unattended `production` token can answer Visitors anything and rewrite `LINKS`, and that recovery "depends on someone noticing within the window". [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)'s watch covers resources, not data, and skips Worker deploys, routes and Email Routing.
@@ -48,7 +50,7 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 - **Compaction resumes through an Operator operation** that names the objects to drop or keep, with an `ops/` audit record like any other (ADR 0010).
 - **`links-data` signs every object it writes to the backup bucket:** minute objects, dailies, snapshots, `auth/` exports, `ops/` records and [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md)'s `offsite/` markers.
   - The signature is HMAC-SHA-256 over the object's key and body, stored with a key ID in the object's custom metadata. Signing the key stops a genuine object being copied to another name.
-  - The signing key is a `links-data` Worker secret, set by hand at bootstrap and kept in the password manager. It is never in GitHub, and deploys leave it in place.
+  - The signing key is a `links-data` Worker secret, set by hand at bootstrap and kept in the password manager. It is never in GitHub, and deploys leave it in place: with `--secrets-file` if a spike shows the flag keeps a secret it doesn't name, and otherwise without the flag ([ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md)).
   - **Compaction and restores skip an object that is unsigned or wrongly signed,** and alert. This closes what the invariant can't: a forged *delete*, which wins the merge, and a forged new Link.
   - **An unsigned `offsite/` marker is ignored,** so a forged marker can't stop an object being copied off-account.
   - **The signature travels with the object to the off-account copy,** as object metadata on the `PUT`, and a rebuild in a fresh account verifies it.
@@ -104,8 +106,8 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 ### New `doctor` checks
 
 - Whether Metadata Read-Only can list a Worker's deployments. If not, `production-plan` takes Workers Scripts Read back.
-- Whether `audit-read` can read Audit Logs v1, and whether v2 or v1 records SQL through `query/v2`.
-- Whether a deploy with `--secrets-file` leaves the signing key in place.
+- Whether `audit-read` can read Audit Logs v1, and whether v2 or v1 records SQL through `query/v2`. If it can't read v1, the token gains the narrowest permission that can. If no account-owned token can, the hourly integrity job lists Email Routing rules and addresses, and Data Studio SQL joins the accepted gaps (ADR 0032).
+- Whether a deploy with `--secrets-file` leaves the signing key in place, run against a preview's `links-data` with a stand-in secret and never against prod. It is a slice 1.6 spike first. If the flag removes the secret, `links-data` deploys without it and the `admin` job pushes `OPERATOR_GATE` and the off-account keys with `wrangler secret bulk` (ADR 0032).
 - That Certificate Transparency Monitoring is on, and whether its recipients can be set on Free.
 - That the hourly integrity job is enabled and ran within the last two hours.
 

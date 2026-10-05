@@ -8,6 +8,8 @@ status: accepted
 
 > Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the off-account heartbeat leaves `FLAGS`. `links-data` keeps a signed `offsite/last-complete` record, its hourly heartbeat carries that time to Grafana, and a Grafana rule replaces the Status Worker's "Off-account copy stale" email. `creators add` reads the signed record.
 
+> Amended by [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md): if the target refuses a retention set by a key that can't read, the bucket's default retention applies the lock and `offsite_backup` gains `retention: "bucket-default"`; `doctor` proves either mode; the write key never gains read.
+
 # Keep a locked off-account copy of the change log, and state what every Operator must protect: the domain and the identity roots
 
 [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) accepted that "losing the whole prod account, or a compromised Operator token, can lose everything", and deferred the revisit to the first real Creator. Nothing scheduled it. Three things make it worth deciding now:
@@ -38,7 +40,7 @@ Decided in [How does a deployment survive losing its Cloudflare account, its dom
 
 - **The target is a contract, not a provider:** any S3-compatible bucket outside Cloudflare with Object Lock in compliance mode. Backblaze B2 is the documented reference: its first 10 GB are free, and its compliance lock "cannot be removed by any user".
   - A second Cloudflare account doesn't qualify. Whether a suspension covers one account or all of a person's accounts is not documented.
-- **`deployment.json` gains `offsite_backup`:** either `{ "endpoint", "region", "bucket" }` or the string `"none"`. There is no default, so an Operator states one or the other.
+- **`deployment.json` gains `offsite_backup`:** either `{ "endpoint", "region", "bucket" }`, with an optional `"retention"` (ADR 0032), or the string `"none"`. There is no default, so an Operator states one or the other.
 - **What is copied:** every daily object, every monthly snapshot, every void record ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)), and every `auth/` export. Minute objects, `ops/` audit records and review files are not.
 - **`links-data` pushes.** Its compaction Cron Trigger already writes each daily and snapshot. After compaction, the same run copies every daily, snapshot, void record and `auth/` object that has no marker yet:
   1. stream the R2 object into one signed `PUT` to the target, under the same key;
@@ -46,6 +48,7 @@ Decided in [How does a deployment survive losing its Cloudflare account, its dom
 
   A crash between the two repeats the `PUT`, which only adds a second version. The `offsite/` prefix has no bucket lock, and a marker is retired with the object it marks.
 - **Every `PUT` carries a compliance-mode retention of 90 days,** the in-account lock's length. A bucket without Object Lock rejects the request, so a misconfigured target fails loudly and can't be written to unlocked.
+- **If the target refuses a retention set by a key that can't read, the bucket's default retention applies it** (compliance, 90 days), `offsite_backup` carries `"retention": "bucket-default"` and the `PUT` sends no retention header ([ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md)). A bucket whose default was never set then accepts unlocked writes, so `doctor` and the drill's rebuild case are what catch it. The write key never gains read.
 - **The target expires objects 120 days after upload,** by a lifecycle rule the Operator sets by hand. A new snapshot arrives every month, so the copy always holds a complete set.
 - **No client-side encryption.** A lost key would lose the backup. Short URLs are public, and `auth/` holds only hashes of 256-bit keys ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)). The target's own encryption at rest is enough.
 - **The target's bucket, lock and lifecycle rule are created by hand,** from a runbook. No OpenTofu owns them: a credential that could manage the bucket could also damage it.
@@ -66,7 +69,7 @@ Decided in [How does a deployment survive losing its Cloudflare account, its dom
 
 - **`links-data` writes a signed record at `offsite/last-complete`** in the backup bucket at the end of each run in which every pending object was copied, including a run with nothing to copy ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)). As first decided this was an `offsite:<utc-date>` key in `FLAGS`, which the `production` token can write.
 - **A Grafana rule we own, "Off-account copy stale",** fires when `links-data`'s hourly heartbeat (ADR 0026) reports a last complete copy more than two days old (ADR 0029). As first decided the Status Worker sent this as an email.
-- **`doctor` probes the write key,** which the Operator supplies once when creating it: an upload with a one-day compliance retention must succeed, and deleting that version and reading it back must both be refused.
+- **`doctor` probes the write key,** which the Operator supplies once when creating it: an upload with a one-day compliance retention must succeed, and deleting that version and reading it back must both be refused. Under `bucket-default` the upload carries no retention and the probe object stays locked for 90 days (ADR 0032). A target that passes in neither mode is not a conforming target.
 
 ### Required before the first real Creator
 
@@ -179,4 +182,4 @@ One *Operator obligations* page in the docs carries this table, linked from the 
 - **New `doctor` checks or early spikes,** for facts nobody documents:
   - whether S3 credentials derived from the `preview` token work for the drill's stand-in bucket (the fallback is a dedicated R2 key in `preview`);
   - whether Cloudflare's `GET /user` reports 2FA to a token with User Details Read;
-  - whether the target accepts a compliance retention set by a key that can't read.
+  - whether the target accepts a compliance retention set by a key that can't read (the fallback is the bucket's default retention, ADR 0032).

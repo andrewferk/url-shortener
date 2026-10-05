@@ -12,6 +12,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the execution headroom cited against a separate Worker follows ADR 0021. The two mentions of the `operator` token's KV Edit follow ADR 0024.
 
+> Amended by [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md): if `audit-read` can't read Audit Logs v1 it gains the narrowest permission that can; if no account-owned token can, the hourly integrity job lists Email Routing rules and addresses, and Data Studio SQL returns to the accepted gaps.
+
 # Watch Audit Logs v2 from the Status Worker for destructive changes, and email the Operator a digest
 
 Cloudflare sends no alert when a Worker, KV namespace, D1 database, R2 bucket or DNS record is deleted ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). The guards so far protect against *OpenTofu* deleting things:
@@ -64,7 +66,7 @@ Decided in [How are destructive changes to Cloudflare resources detected?](https
   - ADR 0011's alert-state pattern;
   - a watchdog outside Cloudflare, Grafana's stale-page check, which fires if the Worker is deleted or stops.
 - **Prod only.** The step follows `probes_enabled`, like ADR 0011's other alerts. In the single-account phase a preview's Status Worker would read the same account's log and send duplicate emails. After the split the preview account is unwatched.
-- **The token is `audit-read`,** an account-owned token with only **Account Settings Read**.
+- **The token is `audit-read`,** an account-owned token with only **Account Settings Read**. If that can't read Audit Logs v1, it gains the narrowest permission that can ([ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md)).
   - Cloudflare has no narrower permission for audit logs. This one also reads account membership and settings, and it can't write anything.
   - It is created in `infra/bootstrap` and kept in the `production` GitHub environment and the password manager.
   - It is pushed only to prod's Status Worker. Previews keep reusing only the Analytics Engine read token (ADR 0007).
@@ -148,7 +150,7 @@ $0 extra.
 ## Consequences
 
 - **ADR 0007's "Cloudflare sends no alert when something is deleted" is answered,** within about 5 minutes when the log isn't delayed, and within a day when it is.
-- **Data-level destruction stays unwatched,** such as raw SQL writes through `query/v2`, and KV key writes. Data Studio SQL is the exception: it is logged in Audit Logs v1, two entries per query, and ADR 0026 adds it to the watch. This is an accepted gap. The change log and `ops/` records are how such damage is found and undone.
+- **Data-level destruction stays unwatched,** such as raw SQL writes through `query/v2`, and KV key writes. Data Studio SQL is the exception: it is logged in Audit Logs v1, two entries per query, and ADR 0026 adds it to the watch, unless no account-owned token can read v1, in which case it stays in this gap (ADR 0032). This is an accepted gap. The change log and `ops/` records are how such damage is found and undone.
 - **The public-facing Status Worker holds an account-wide read token.** It reads account membership and settings but can change nothing.
 - **Every delete by the Operator sends an email.** That is intended, and it is cheap at the Operator's volume of deletes.
 - **Adding a prod resource means adding it to the protected set** through an OpenTofu output. Otherwise its deletion by the `preview` token would go unreported during the single-account phase.
