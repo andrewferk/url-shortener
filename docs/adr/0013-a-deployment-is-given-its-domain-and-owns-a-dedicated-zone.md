@@ -14,6 +14,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's CAA bullet follows ADR 0026. The Cloudflare Registrar bullet follows ADR 0025.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): Email Routing and the `abuse@` rule live in a hand-applied configuration in `infra/bootstrap`, not in `infra/zone`.
+
 # A deployment is given its domain and owns a dedicated zone
 
 The project is headed for open source. It should run as its own service, be embeddable in another service, and not rule out a SaaS built on it. So no decision names a domain. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) already takes the Short domain as an input (`base_domain`, `preview_base_domain`) and derives every hostname from it. This ADR states what a deployment requires of that domain, and what it does to the zone.

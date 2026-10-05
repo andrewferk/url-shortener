@@ -22,6 +22,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): two rules that lived only in the PRD are stated here: an alert sends its email before it writes alert state, and no email a Worker sends the Operator carries a link. The executions table, the Grafana alert rules, the execution headroom and the latency Objective's eligible outcomes follow ADRs 0021 and 0022.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): Email Routing and the Operator's destination address move from `infra/zone` to a hand-applied configuration, and the `production` token holds no Email Routing permission. "Off-account copy stale" is a fifth Grafana rule we own, not a Status Worker email.
+
 # Report three rolling 30-day Objectives from additive rollup counts, and alert the Operator by email from both Grafana and the Status Worker
 
 [ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md) defined what the Status page measures but left open what it reports against. The service now has three **Objectives**, each over a rolling 30 days: uptime from Probe-minutes, and Redirect latency and error rate from Redirect events. The two request-based Objectives are ratios, not percentiles, so each has an **Error budget** that can be counted. The rollups store additive counts, and 30-day figures are summed from D1. Alerts go to the Operator by email, with no paging. Grafana sends the ones that must work while Cloudflare is down, and the Status Worker sends the ones that need Analytics Engine data.
@@ -85,7 +87,7 @@ Decided in [What SLOs does the Status page report against?](https://github.com/a
     - **An alert sends its email first and writes its alert state second,** so a failed run can duplicate an alert and never loses one.
     - **No email a Worker sends the Operator carries a link.** The alert address is an alias committed in a public ops repo, so an alert with a link is a phishing template ([ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)). An email names its runbook or dashboard page in words. Where it must name a Short URL or an object key, as ADR 0026's findings do, that is an identifier to look up, not a link to follow.
 - **Where it lives** ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)):
-  - `infra/zone`: Email Routing on the zone and the Operator's verified destination address.
+  - `infra/bootstrap`, applied by hand: Email Routing on the zone and the Operator's verified destination address ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md); `infra/zone` as first decided).
   - `infra/env`, when `probes_enabled`: the Grafana contact point, the notification policy, `grafana_synthetic_monitoring_check_alerts` on the Canary link check, and the Status page check.
   - Wrangler: the Status Worker's `send_email` binding.
 
@@ -123,6 +125,6 @@ $0 extra.
 - **The Status Worker's alerts go down with Cloudflare.** Grafana's Redirects-down alert covers the outage itself, and the stale-page check covers the Status Worker failing on its own.
 - **Grafana's execution headroom is about 24k a month** ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md); it was about 6k as first decided). Probing every minute from three locations needs a paid plan.
 - **Email Routing takes the zone's MX records,** so the short domain can receive mail only through Email Routing.
-- **The `production` token gains Email Routing permissions** for `infra/zone`: the zone's rules and the account's destination addresses.
+- **The `production` token holds no Email Routing permission.** As first decided it gained the zone's rules and the account's destination addresses for `infra/zone`. ADR 0029 moved Email Routing to a hand-applied configuration and took them away.
 - **At today's traffic, the request-based Objectives show "insufficient data"** until the window holds 1,000 eligible Redirects. Uptime is meaningful from day one.
 - **Budget math is additive.** A future Objective must be a ratio of countable events, or it needs its own rollup column.

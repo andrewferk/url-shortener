@@ -8,13 +8,15 @@ status: accepted
 
 > Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a forged delete is recovered by a Void. The sweep alerts on a tombstone over a live row and heals neither side. The invariant check treats a voided delete as absent, and a forged void record is unsigned, so it is skipped.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the hourly integrity job also lists every ruleset and Workers Route on the zone, because a plan can't see an undeclared one. The Email Routing claim is restated: no unattended credential can change it. The heartbeat also carries the time of the last complete off-account copy, read by a fifth Grafana rule.
+
 # Detect Redirect hijacks from `links-data` and the ops repo: sweep `LINKS` against the shards, sign the change log, and compare the live zone and Workers with `main` every hour
 
 Rewriting where Short URLs go is the highest-value attack on a shortener, and nothing in the design would notice it. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) says the unattended `production` token can answer Visitors anything and rewrite `LINKS`, and that recovery "depends on someone noticing within the window". [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)'s watch covers resources, not data, and skips Worker deploys, routes and Email Routing.
 
 Three facts shape the answer:
 
-- **The watch sits inside the blast radius.** The `production` token deploys `status` as well as `redirect`, and edits Workers Routes, rulesets, zone settings and Email Routing ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md), [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)). A stolen token can replace the audit watch along with the Redirect code.
+- **The watch sits inside the blast radius.** The `production` token deploys `status` as well as `redirect`, and edits Workers Routes, rulesets, zone settings and, until ADR 0029, Email Routing ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md), [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)). A stolen token can replace the audit watch along with the Redirect code.
 - **Reporting by actor misses the main case.** "Report deploys by anyone except the expected CI token" is silent when the stolen token *is* the expected CI token.
 - **A redirect rule acts whatever the Worker does.** "Requests handled by Workers … will not suppress actions from modern Rules features." So a hijack needs no Worker deploy at all.
 
@@ -60,7 +62,7 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 
 [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md)'s weekly drift job becomes an hourly integrity job (`drift_schedule`), still in `production-plan` with its read-only token. It fails, and GitHub emails the Operator, when either check finds a difference.
 
-- **The zone.** The drift plan runs as before. It catches a redirect rule, a moved route, a changed zone setting or a re-pointed Email Routing rule, whoever made the change.
+- **The zone.** The drift plan runs as before. It catches a change to anything declared, whoever made it: a rule in a declared ruleset, a zone setting or a re-pointed Email Routing rule. A plan can't see what isn't declared, so the job also lists every ruleset and every Workers Route on the zone and fails on one that isn't expected ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)). That catches a redirect rule in an undeclared phase and an added or moved route.
 - **The Workers.** Every deploy run ends by writing the version IDs live for `redirect`, `status` and `links-data` to a GitHub deployment record, after any rollback. The hourly job lists each Worker's live deployment and fails if a live version isn't the recorded one.
   - Any deploy, secret change or binding change makes a new version ID.
   - Version annotations such as `workers/tag` are set by whoever deploys and are not trusted.
@@ -72,10 +74,10 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 ### Alerts and the heartbeat
 
 - **`links-data` emails the Operator itself,** through its own `send_email` binding restricted to the Operator's verified address. One email per finding kind per run, with the Short URLs or object keys involved. They are identifiers to look up, not links to follow: no email a Worker sends carries a link ([ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)).
-- **After each hourly run `links-data` pushes a heartbeat to Grafana:** the time of the run and its count of findings, over Grafana Cloud's HTTPS push endpoint with a write token held as a Worker secret.
+- **After each hourly run `links-data` pushes a heartbeat to Grafana:** the time of the run and its count of findings, over Grafana Cloud's HTTPS push endpoint with a write token held as a Worker secret. It also carries the time of the last complete off-account copy, which a fifth rule, "Off-account copy stale", reads (ADR 0029).
 - **A fourth Grafana rule we own, "Integrity checks stale or failing",** joins [ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)'s three. It fires when no heartbeat has arrived for three hours or the last one reports findings. It also answers ADR 0008's "compaction must be monitored".
 - **Prod only,** following `probes_enabled`.
-- **Email Routing forwards only to a verified address,** so a stolen token can break the email path but can't quietly redirect it. The heartbeat and the hourly job cover a broken path.
+- **No unattended credential can change Email Routing** (ADR 0029). It is applied by hand, and the `production` token holds no permission for it. As first decided this read "Email Routing forwards only to a verified address, so a stolen token can break the email path but can't quietly redirect it", which overstated it: a rule can send mail to a Worker, or to any address verified on the account. The heartbeat and the hourly job cover a broken path.
 
 ### The audit watch stays in the Status Worker
 
@@ -128,7 +130,7 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 - **Have the deploy workflow announce its versions to `links-data` with a GitHub OIDC token,** and check live versions from a `links-data` cron. Strong, but it adds an endpoint, token verification and a Workers read token inside Cloudflare, where the hourly job needs none.
 - **Report deploys, route changes and Email Routing changes in the audit watch,** by any actor but the CI token. It misses the stolen CI token.
 - **Move the audit watch to `links-data`.** Its state would be rebuilt there for a risk the hourly job already covers.
-- **A heartbeat key in `FLAGS` read by the Status Worker,** as ADR 0025 does for the off-account copy. The stolen token can write `FLAGS` and replace `status`, so it could fake a healthy run.
+- **A heartbeat key in `FLAGS` read by the Status Worker,** as ADR 0025 first did for the off-account copy (ADR 0029 moved that heartbeat to Grafana too). The stolen token can write `FLAGS` and replace `status`, so it could fake a healthy run.
 - **Grafana alerts only, no email from `links-data`.** A heartbeat can say a check failed but not which Short URLs.
 - **Pause deletes above the threshold.** A way to block real Creators.
 - **A minimal CAA record that Cloudflare appends to.** That it restricts issuance is inferred, not tested, and it can drift.

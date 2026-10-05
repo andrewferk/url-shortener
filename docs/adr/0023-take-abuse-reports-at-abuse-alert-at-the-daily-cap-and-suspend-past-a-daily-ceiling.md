@@ -8,6 +8,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body no longer says `links-data` never binds `AUTH` (ADR 0024).
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the `abuse@` Email Routing rule lives in a hand-applied configuration in `infra/bootstrap`, not in `infra/zone`.
+
 # Take Abuse reports at `abuse@`, alert at the daily cap, and take down and suspend past a daily ceiling
 
 Abuse that gets the Short domain blocklisted or the Cloudflare account suspended is the cheapest way to destroy a deployment. Until now there was a takedown runbook and nothing else: no address to report to, no page saying what happens to a report, and no signal when a Creator hit [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s daily cap. That cap is soft. The burst limit counts per location, so a stolen key used from about 300 locations creates about 18,000 Links a minute, and the cap flag takes two to three minutes to land: 36,000 to 54,000 Links, all redirecting until the Operator notices. The only response was removing the Creator, who in that case is the victim.
@@ -20,7 +22,7 @@ Decided in [How does a deployment take in abuse reports and notice an abusive Cr
 
 ### Intake
 
-- **`abuse@<Short domain>` is the abuse address.** `infra/zone` adds one Email Routing rule that forwards it to the Operator's verified address, the one [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)'s alerts use.
+- **`abuse@<Short domain>` is the abuse address.** The hand-applied Email Routing configuration ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md); `infra/zone` as first decided) holds one rule that forwards it to the Operator's verified address, the one [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md)'s alerts use.
 - **The abuse policy is a static page at `/abuse` on the Status Worker,** in prod. Its text is a template in this repo. It says what counts as abuse, how to report it (the abuse address, with the Short URL), what happens to a reported Link, and the response target.
 - **Apex 404 and 410 answers point to it.** Their plain-text bodies name the abuse address and the policy's URL. The apex gains no route and still serves only Redirects ([ADR 0002](./0002-random-short-codes-claimed-by-conditional-insert.md)); `/` still answers 404 ([ADR 0013](./0013-a-deployment-is-given-its-domain-and-owns-a-dedicated-zone.md)).
 - **No `security.txt`.** RFC 9116 is for vulnerability reports and advises against using it for incidents. Vulnerabilities in the software go to a `SECURITY.md` in this repo, with GitHub private vulnerability reporting. The abuse page says where to send anything specific to the deployment.

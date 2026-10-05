@@ -6,6 +6,8 @@ status: accepted
 
 > Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): void records are copied off-account with the dailies and snapshots, and a rebuild copies them back.
 
+> Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the off-account heartbeat leaves `FLAGS`. `links-data` keeps a signed `offsite/last-complete` record, its hourly heartbeat carries that time to Grafana, and a Grafana rule replaces the Status Worker's "Off-account copy stale" email. `creators add` reads the signed record.
+
 # Keep a locked off-account copy of the change log, and state what every Operator must protect: the domain and the identity roots
 
 [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) accepted that "losing the whole prod account, or a compromised Operator token, can lose everything", and deferred the revisit to the first real Creator. Nothing scheduled it. Three things make it worth deciding now:
@@ -62,13 +64,13 @@ Decided in [How does a deployment survive losing its Cloudflare account, its dom
 
 ### Noticing a stalled copy
 
-- **`links-data` writes `offsite:<utc-date>` to `FLAGS`** at the end of each run in which every pending object was copied, including a run with nothing to copy. The key expires by KV's native `expiration`.
-- **The Status Worker emails "Off-account copy stale"** when neither of the last two UTC days has a key. It already binds `FLAGS` (ADR 0023).
+- **`links-data` writes a signed record at `offsite/last-complete`** in the backup bucket at the end of each run in which every pending object was copied, including a run with nothing to copy ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)). As first decided this was an `offsite:<utc-date>` key in `FLAGS`, which the `production` token can write.
+- **A Grafana rule we own, "Off-account copy stale",** fires when `links-data`'s hourly heartbeat (ADR 0026) reports a last complete copy more than two days old (ADR 0029). As first decided the Status Worker sent this as an email.
 - **`doctor` probes the write key,** which the Operator supplies once when creating it: an upload with a one-day compliance retention must succeed, and deleting that version and reading it back must both be refused.
 
 ### Required before the first real Creator
 
-- **`creators add` refuses a first real Creator** until `offsite_backup` is configured and its heartbeat is fresh. This joins [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)'s account-split check, in the same Workflow (ADR 0024).
+- **`creators add` refuses a first real Creator** until `offsite_backup` is configured and the signed `offsite/last-complete` record is under two UTC days old (ADR 0029). This joins [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)'s account-split check, in the same Workflow (ADR 0024).
 - **`offsite_backup: "none"` opts out.** `creators add` then proceeds, and `doctor` reports "no off-account copy: accepted risk" on every run.
 
 ### Rebuilding in a fresh account
@@ -134,7 +136,8 @@ One *Operator obligations* page in the docs carries this table, linked from the 
 |---|---|
 | Code | `permissions:` blocks and their lint; a push that can't delete; compliance retention on every `PUT`; `creators add`'s gate |
 | `doctor` | The `main` ruleset; the registrar lock and expiry over RDAP; 2FA on GitHub and Cloudflare; the write key's reach |
-| A Status Worker alert | Domain expiry; registrar lock removed; off-account copy stale |
+| A Status Worker alert | Domain expiry; registrar lock removed |
+| A Grafana rule | Off-account copy stale (ADR 0029) |
 | The Operator's word | Auto-renew and its payment method; a registrar outside the prod account; 2FA on the registrar, Grafana, the mailbox and the target; no SMS; the target's lifecycle rule and spending cap; the read-only default `GITHUB_TOKEN` |
 
 ## Cost
@@ -162,9 +165,9 @@ One *Operator obligations* page in the docs carries this table, linked from the 
 
 ## Consequences
 
-- **Reverses ADR 0008's accepted risk.** Losing the prod account, or every in-account backup, no longer loses everything. `FLAGS` gains `offsite:<utc-date>`, and the bucket gains an unlocked `offsite/` prefix of markers.
+- **Reverses ADR 0008's accepted risk.** Losing the prod account, or every in-account backup, no longer loses everything. The bucket gains an unlocked `offsite/` prefix of markers and the `offsite/last-complete` record (ADR 0029; an `offsite:<utc-date>` key in `FLAGS` as first decided).
 - **Amends ADR 0007:** `creators add` also checks the off-account copy.
-- **Amends [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md):** four new Status Worker emails: off-account copy stale, Short domain expiring, registrar lock removed, and domain check blind.
+- **Amends [ADR 0011](./0011-objectives-error-budgets-and-email-alerts.md):** three new Status Worker emails: Short domain expiring, registrar lock removed, and domain check blind. "Off-account copy stale" was a fourth until ADR 0029 made it a Grafana rule.
 - **Amends ADR 0013:** a registrar lock and auto-renew are required; the advice on Cloudflare Registrar is reversed; the Status Worker looks the domain up daily.
 - **Amends ADR 0015:** the ops repo's `main` carries a ruleset from `examples/ops-repo/`, and every workflow declares `permissions:`.
 - **Amends ADR 0016:** `deployment.json` gains `offsite_backup`; the secret contract gains `OFFSITE_KEY_ID` and `OFFSITE_SECRET`; the drill gains a seventh case; `doctor` gains the checks above.
