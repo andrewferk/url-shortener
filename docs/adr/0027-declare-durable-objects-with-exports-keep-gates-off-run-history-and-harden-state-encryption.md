@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): a Worker with `exports` keeps `--tag`; `links-data` is tagged with its bundle hash. What `exports` rules out is restated as documented and partly contradicted by Wrangler's source, to be settled by a spike.
+
 # Declare the Durable Objects with `exports`, keep delivery's gates off run history, make the state passphrase random and enforced, show approvers values, and pin OpenTofu 1.13
 
 Six parts of [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) and [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md) no longer match what Cloudflare, GitHub and OpenTofu document:
@@ -23,7 +25,7 @@ Decided in [How does delivery change: Durable Object `exports`, retention-proof 
 
 - **From its first deploy,** `links-data` declares the shard and Creator classes in `exports`, not in a `migrations` array. Its `wrangler.base.jsonc` holds them, and the render script passes them through.
 - **The switch is one-way,** which is why it is made before anything is deployed: "Once a Worker has been deployed with `exports`, subsequent deploys cannot return to the legacy `migrations` array."
-- **What it costs falls only on `links-data`.** `wrangler versions upload` fails on a config with `exports` entries, and gradual deployments aren't supported with them. ADR 0016 already deploys `links-data` with `wrangler deploy`, never rolls it back and rejected gradual rollout. `redirect` and `status` declare no classes, so they keep versions, `--tag` and `wrangler rollback`.
+- **What it costs falls only on `links-data`.** One Cloudflare docs page says `wrangler versions upload` fails on a config with `exports` entries and that gradual deployments aren't supported with them; Wrangler's changelog and source contradict the first, and rollback is documented as blocked only across a lifecycle change. A spike settles it ([ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md)), and nothing here depends on the answer: ADR 0016 already deploys `links-data` with `wrangler deploy`, never rolls it back and rejected gradual rollout. `links-data` keeps `--tag`, which `wrangler deploy` sets on either upload path. `redirect` and `status` declare no classes, so they keep versions and `wrangler rollback` whatever the spike finds.
 - **The class-delete guard is now a documented one:** removing a class another Worker binds to is rejected with `tombstone_delete_blocked_by_external_bindings`.
 - **The other guard is still inferred.** That a non-forced delete of the whole Worker is refused while `redirect` binds to it follows only from the API's `force` parameter. The restore drill already deletes `redirect-drill` and then `links-data-drill`; it now first tries to delete `links-data-drill` while `redirect-drill` binds to it, and fails the drill if Cloudflare allows it.
 

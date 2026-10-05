@@ -10,6 +10,8 @@ status: accepted
 
 > Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the hourly integrity job also lists every ruleset and Workers Route on the zone, because a plan can't see an undeclared one. The Email Routing claim is restated: no unattended credential can change it. The heartbeat also carries the time of the last complete off-account copy, read by a fifth Grafana rule.
 
+> Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): the deployment record also holds `links-data`'s bundle hash, and the hourly integrity job fails when the live `workers/tag` differs from it. The version ID comparison stays the hijack check.
+
 # Detect Redirect hijacks from `links-data` and the ops repo: sweep `LINKS` against the shards, sign the change log, and compare the live zone and Workers with `main` every hour
 
 Rewriting where Short URLs go is the highest-value attack on a shortener, and nothing in the design would notice it. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) says the unattended `production` token can answer Visitors anything and rewrite `LINKS`, and that recovery "depends on someone noticing within the window". [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)'s watch covers resources, not data, and skips Worker deploys, routes and Email Routing.
@@ -63,9 +65,9 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md)'s weekly drift job becomes an hourly integrity job (`drift_schedule`), still in `production-plan` with its read-only token. It fails, and GitHub emails the Operator, when either check finds a difference.
 
 - **The zone.** The drift plan runs as before. It catches a change to anything declared, whoever made it: a rule in a declared ruleset, a zone setting or a re-pointed Email Routing rule. A plan can't see what isn't declared, so the job also lists every ruleset and every Workers Route on the zone and fails on one that isn't expected ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)). That catches a redirect rule in an undeclared phase and an added or moved route.
-- **The Workers.** Every deploy run ends by writing the version IDs live for `redirect`, `status` and `links-data` to a GitHub deployment record, after any rollback. The hourly job lists each Worker's live deployment and fails if a live version isn't the recorded one.
+- **The Workers.** Every deploy run ends by writing the version IDs live for `redirect`, `status` and `links-data` to a GitHub deployment record, after any rollback. The hourly job lists each Worker's live deployment and fails if a live version isn't the recorded one. The record also holds `links-data`'s bundle hash, and the job fails when the live `workers/tag` differs from it ([ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md)).
   - Any deploy, secret change or binding change makes a new version ID.
-  - Version annotations such as `workers/tag` are set by whoever deploys and are not trusted.
+  - Version annotations such as `workers/tag` are set by whoever deploys and are not trusted. The tag comparison is there because the `plan` job reads the tag to decide whether `links-data` is pending; the version ID is the hijack check.
   - A break-glass deploy from the Operator's laptop fails the job until the next CI deploy. That is intended.
 - **A private ops repo pays Actions minutes for this;** a public one doesn't.
 - **GitHub stops scheduled workflows on a public repo after 60 days without activity** (ADR 0025). `doctor` checks that the job is enabled and ran within the last two hours.

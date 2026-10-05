@@ -14,6 +14,8 @@ status: accepted
 
 > Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the backup bucket configuration takes `location_hints.r2` and `prevent_destroy`, and the pull request's `plan` job plans it. Email Routing becomes a second hand-applied configuration, so `production` loses its Email Routing permissions. `production-plan` gains Workers Routes Read.
 
+> Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): the shard touch is a gated method, called by the `touch-shards` Workflow. The `production-admin` token starts that Workflow; if Editor on `links-data` can't, it gains the narrowest Workflows permission that can.
+
 # State what each credential can do to Link data, gate Operator methods with a secret, move `AUTH` writes into `links-data`, and take the backup locks out of CI's reach
 
 [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) says "nothing that runs unattended in prod can delete anything". It reasons about API-token permissions, and it is false for data. A token that can deploy a Worker controls everything that Worker can bind, and three Cloudflare facts mean a binding can't be fenced:
@@ -50,7 +52,7 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 
 - **Every `links-data` deploy generates a random 256-bit `OPERATOR_GATE`** and pushes it as a Worker secret with that deploy. It is never stored or logged anywhere else, and nobody needs to know it.
 - **A gated method takes the gate as an argument** and compares it, in constant time, with the value in its own environment. Workflows, the outbox and the Creator objects run in `links-data`, so they read it from their environment and pass it. `redirect` can't read another Worker's secret.
-- **Ungated methods are exactly what the Link API and the Redirect fallback call:** create, read, list and a Creator's own delete. Everything else is gated: Takedowns, Voids, Creator removal and suspension, freezes, restores, re-drives, reconcile inserts, snapshots, and the calls between shards and Creator objects.
+- **Ungated methods are exactly what the Link API and the Redirect fallback call:** create, read, list and a Creator's own delete. Everything else is gated: Takedowns, Voids, Creator removal and suspension, freezes, restores, re-drives, reconcile inserts, snapshots, the deploy's shard touch ([ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md)), and the calls between shards and Creator objects.
 - **The ungated delete can never record the Operator as the deleter.** `deleted_by='operator'` is set only by a gated method.
 - **A step that straddles a deploy can see a mismatch.** It fails and retries against the new version; every step can already run twice ([ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md)).
 - **The gate doesn't rely on binding topology.** Whether a per-Worker Editor token can add a `script_name` Durable Object binding or a service binding is undocumented. `doctor` reports it, and nothing here depends on the answer.
@@ -94,7 +96,7 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
   | Token | Workers permission |
   |---|---|
   | `production` | Editor on `redirect` and `status` |
-  | `production-admin` | Editor on `links-data` |
+  | `production-admin` | Editor on `links-data`, which must also start and read the `touch-shards` Workflow instance (ADR 0031); a spike settles whether it can, and the token gains the narrowest Workflows permission if not |
   | `operator` | Editor on `links-data`, Workers Scripts Read |
   | `production-plan` | Metadata Read-Only, in place of Workers Scripts Read |
 

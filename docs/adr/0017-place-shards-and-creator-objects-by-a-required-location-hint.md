@@ -8,6 +8,8 @@ status: accepted
 
 > Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): prod's hand-applied backup bucket configuration takes `location_hints.r2`, records it and carries `prevent_destroy`, and the `plan` job plans it. The state buckets' hint is unchecked, which is accepted.
 
+> Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): the `admin` job touches the shards by starting a `touch-shards` Workflow in `links-data` over the Workflows REST API; the Workflow calls each shard through the stub factory, and the touch is a gated method.
+
 # Place shards and Creator objects by a required location hint, with optional hints for D1 and R2 and no jurisdiction
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) said "there are no regions to choose". That holds for the Workers, but not for what they store. Cloudflare creates a Durable Object "close to where the initial `get()` request is made", and objects "do not currently change locations after they are created". [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) made the object names permanent and no ADR passed a `locationHint`, so each of the 256 shards would have landed, for good, near whichever Visitor, bot, Creator or CI run reached it first. A Creator's object is first reached by a shard's outbox alarm, so it would have landed near that shard.
@@ -60,9 +62,9 @@ A round trip is roughly 80–150 ms between North America and Europe, and 200–
 
 ### Placing all 256 shards before traffic
 
-- **The deploy's `admin` job touches every shard** after it deploys `links-data` (ADR 0016), through the stub factory. It is 256 requests and changes nothing on a re-run.
+- **The deploy's `admin` job touches every shard** after it deploys `links-data` (ADR 0016). The job can't call a shard itself, because `links-data` has no public route, so it starts a `touch-shards` Workflow in `links-data` over the Workflows REST API and polls it ([ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md)). The Workflow calls each shard through the stub factory, by a gated method. It is 256 requests and changes nothing on a re-run.
 - **Correctness never depends on it.** The hint on every `get()` is the mechanism. The touch step exists so that all 256 shards are placed from a known hint at a known time, and so that a misplaced shard is seen while prod can still be wiped (before `v0.1.0`).
-- **It reports where each shard landed, and never fails the deploy.** Hints are best effort, so a shard outside the hinted region is something to read, not an error.
+- **It reports where each shard landed, and the report never fails the deploy.** The report is the Workflow instance's output, written to the job summary. Only an instance that errors or doesn't end fails the job. Hints are best effort, so a shard outside the hinted region is something to read, not an error.
 - **Cloudflare documents no way for a Durable Object to learn its own location.** An early spike finds one. If there is none, the step still runs and reports only that each shard answered.
 - **The Canary link step is no longer what places a shard.** Before this decision, the smoke test would have pinned one shard near the CI runner.
 

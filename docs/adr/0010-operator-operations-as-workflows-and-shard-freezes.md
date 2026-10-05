@@ -24,6 +24,8 @@ status: accepted
 
 > Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): `links void` cancels a forged or mistaken delete, and `links find` gains `--deleted-since` and `--deleted-by`. A frozen shard refuses deletes, and a restore drains the shard's outbox before it rewinds. The rollback review file moves to an unlocked `review/` prefix and is deleted when its operation ends.
 
+> Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): `links-data` also holds `touch-shards`, a Workflow the deploy's `admin` job starts. It is not an Operator operation: it takes no reason and writes no audit record.
+
 # Run Operator operations as Workflows in `links-data`, audit them in the backup bucket, and freeze shards during restores
 
 The shard and Creator Durable Objects live in `links-data`, which has no routes and deploys only through `production-admin` ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). There is no admin endpoint ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)). Yet the Operator must reach that data:
