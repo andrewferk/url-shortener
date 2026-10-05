@@ -18,6 +18,8 @@ status: accepted
 
 > Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a tombstone also carries `deleted_at` and `deleted_by`, as `dt` and `by`.
 
+> Amended by [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md): `colo-hit` is eligible for the latency and error-rate Objectives, which now name the outcomes they exclude.
+
 # Cache Redirects only inside the Worker: a 30 s per-colo cache in front of a 30 s KV cache, `no-store` to browsers, and no purge
 
 Every Redirect runs the Worker ([ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md)), and the zone cache sits behind the Worker, so it never sees a Redirect. That leaves two caches that matter: KV's own edge cache, and whatever the Visitor's browser keeps. We assume Workers KV bills every read, per key, whether or not its edge cache served it. Cloudflare's pricing page says "All operations incur charges" and lists no exemption, but no page mentions cached reads, so a spike measures it (see [The billing assumption](#the-billing-assumption)). On that assumption KV's `cacheTtl` buys latency, not money. [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) priced peak KV reads at a 90% edge hit ratio as if cached reads were free. Only a cache the Worker owns makes that figure true, and the Cache API is free. We put a short per-colo cache in front of KV and keep browsers out of it entirely. Nothing is purged: deletion is bounded by the TTLs alone.
@@ -39,7 +41,7 @@ Decided in [How are Redirects cached at the edge?](https://github.com/andrewferk
 - **`Cache-Control: no-store` on every Redirect Worker response:** 302, 404, 410, and ADR 0004's 429 and 503. A browser never replays a Redirect without the Worker seeing it.
 - **No negative caching** beyond what KV does on its own. KV's cached misses don't reduce shard traffic, because every KV miss falls back to the shard anyway. [ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)'s shard-fallback limit and cost brake (hourly since ADR 0022) bound that traffic.
 - **No purge on delete.** KV can't be purged, and the Cache API purges only one colo at a time from inside a Worker. A Deleted link stops redirecting once its tombstone has passed through both caches. The worst case is about **60 s** after the outbox writes it (30 s colo + 30 s KV), inside ADR 0001's "about 1–2 minutes". It is "about" because Cloudflare documents no hard upper bound on how long a KV location can serve a stale value.
-- **Redirect events:** the outcomes in ADR 0003 gain `colo-hit`, a 302 served from the per-colo cache. `kv-hit` now means the colo cache missed and KV answered.
+- **Redirect events:** the outcomes in ADR 0003 gain `colo-hit`, a 302 served from the per-colo cache. `kv-hit` now means the colo cache missed and KV answered. `colo-hit` is eligible for both request-based Objectives ([ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md)).
 
 ## The billing assumption
 

@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md): a second dataset, `request_events`, indexed `<hostname>:<status class>`, is counted by this ADR's rule, `sum(sample_interval * _sample_interval)`.
+
 # Index Redirect events by Namespace, source and outcome, weight every query by `_sample_interval`, and let the rollup heal its own gaps
 
 [ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md) weights every Redirect event query by the design's own `weight` column, and [ADR 0014](./0014-link-identity-carries-an-opaque-namespace.md) indexes each event by `<Namespace ID>:<Short code>`. Cloudflare's docs say otherwise on both: Analytics Engine samples at write time per index value and again at read time, so every count must multiply by `_sample_interval`, and reading across many index values "will result in low-resolution data, possibly unusably low". As decided, the volume series, the Error-budget counts and the cost brake all undercount once sampling starts, and the brake's query reads across one index value per guessed Short code during exactly the flood it exists to catch. Separately, the rollup recomputes only the last 3 buckets, so a Status Worker outage longer than 15 minutes, 3 hours or 3 days leaves permanent holes, including in the 30-day Objective sums.

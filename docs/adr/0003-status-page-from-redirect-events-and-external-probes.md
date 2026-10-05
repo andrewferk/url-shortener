@@ -22,6 +22,8 @@ status: accepted
 
 > Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): the Status Worker no longer reads `offsite:<utc-date>` or sends the "Off-account copy stale" email. A Grafana rule we own raises it.
 
+> Amended by [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md): the Link API and the Status Worker write one data point per request to a second dataset, `request_events`, and every rollup bucket stores a count of the requests seen in both datasets, for the Request flood and Request spend alerts.
+
 # Feed the Status page from self-timed Redirect events and external Probes, served by a separate Status Worker
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us no edge latency percentiles, no per-request edge log, and no health checks. So the Worker measures each Redirect itself and writes a Redirect event to Workers Analytics Engine. Uptime comes from Probes run by an external service. A separate Status Worker rolls both sources up into D1 every 5 minutes and serves precomputed snapshots. Because the page depends on the Worker seeing every Redirect, **every Redirect runs the Worker**: Redirects are never served from Workers Cache. The saving would be small anyway, since cache hits are still billed as Workers requests.
@@ -37,6 +39,7 @@ Decided in [How does the Status page get its metrics and where is it served?](ht
     - blobs: `outcome` (`kv-hit` / `shard-fallback` / `not-found` / `gone`), `source` (`visitor` / `probe`), `colo`
     - doubles: `duration_ms`, `weight`, `status`
   - **Percentiles:** p50/p90/p99 come from `quantileExactWeighted`, weighted by `weight`.
+- **Request events** ([ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md)): the Link API and the Status Worker each write one data point per request to a second dataset, `request_events`, indexed `<hostname>:<status class>`. A Redirect never writes one. They feed the Request flood and Request spend alerts through one more additive count per bucket, and never the page's graphs or the Objectives.
 - **Volume** counts Visitor Redirects, broken down by outcome, and leaves out Probes. **Error rate** (the 5xx share of Visitor Redirects) is a separate series. It doesn't count toward uptime.
 - **Uptime** comes from Probes run by Grafana Cloud Synthetic Monitoring.
   - Three Probe locations follow the Canary link every 2 minutes ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)). Each run stands for the Probe-minutes of its interval. A window is down when at least two locations reported and every report failed.
