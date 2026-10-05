@@ -6,6 +6,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): "the `Idempotency-Key` is stored but never logged" is stated here. The PRD's "never logged" rule read as if nothing kept the key.
 
+> Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a keyed create whose own earlier attempt is now a Deleted link answers `201` with the Link as it is now, `state: deleted` and no `target_url`.
+
 # Make Link creation idempotent by deriving the Short code from the client's Idempotency-Key
 
 A retried `POST /v1/links` would draw a new random Short code ([ADR 0002](./0002-random-short-codes-claimed-by-conditional-insert.md)). The new code usually lands on a different shard, so a lost response turns into a second, orphaned Link. An idempotency record can't live in the shard that claims the Link, because the retry doesn't know which shard that is ([ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md)). The Creator's Durable Object is kept off the create path ([ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)). So we don't store the key anywhere separate. When a request carries an `Idempotency-Key`, the Short code is **derived from the key** instead of drawn at random. A retry then recomputes the same code, reaches the same shard, and finds its own row. The existing atomic claim is the only coordination.
@@ -25,7 +27,8 @@ Decided in [What does the Link API on api. look like?](https://github.com/andrew
 - **The `Idempotency-Key` is stored but never logged.** The shard row and the change log hold it, because that is how a retry is recognised. No Worker log line, Redirect event, audit record, Workflow parameter or CI log holds one.
 - **Claiming a keyed create** walks the candidates in order:
   - **The claim succeeds:** a new Link, answered `201`.
-  - **The row belongs to this Creator and has this key:** it's an earlier attempt of the same create. It's replayed as `201` with the same body plus `Idempotent-Replayed: true` if the Target URL, Custom alias and Expiry match (after normalization: WHATWG `href`, Expiry truncated to the second). If they differ, it answers `422 idempotency_key_reused`.
+  - **The row belongs to this Creator and has this key:** it's an earlier attempt of the same create. It's replayed as `201` with the Link as its body plus `Idempotent-Replayed: true` if the Target URL, Custom alias and Expiry match (after normalization: WHATWG `href`, Expiry truncated to the second). If they differ, it answers `422 idempotency_key_reused`.
+    - **The body is the Link as it is now,** not a stored copy of the first response. If the earlier attempt has since been deleted, the Target URL is compared by hash (ADR 0019) and the replay answers `201` with `state: deleted` and no `target_url` ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)). The Link API docs tell clients to read `state` on a replay.
   - **Any other row:** a collision, so the walk moves to *n*+1.
   - **The walk gives up after 8 candidates** with `503 unavailable`. At 1B Links, that's about (3×10⁻⁴)⁸ likely.
 - **A keyed create with a Custom alias** uses the alias as its only candidate. The key only tells "my earlier attempt" (replay) apart from "taken" (`409 alias_taken`).

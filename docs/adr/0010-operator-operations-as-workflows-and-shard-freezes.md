@@ -22,6 +22,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the audit record of an `AUTH` command follows ADR 0024. The `operator` token and the laptop's R2 key follow ADRs 0024 and 0025.
 
+> Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): `links void` cancels a forged or mistaken delete, and `links find` gains `--deleted-since` and `--deleted-by`. A frozen shard refuses deletes, and a restore drains the shard's outbox before it rewinds. The rollback review file moves to an unlocked `review/` prefix and is deleted when its operation ends.
+
 # Run Operator operations as Workflows in `links-data`, audit them in the backup bucket, and freeze shards during restores
 
 The shard and Creator Durable Objects live in `links-data`, which has no routes and deploys only through `production-admin` ([ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md)). There is no admin endpoint ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)). Yet the Operator must reach that data:
@@ -85,8 +87,14 @@ Decided in [How does the Operator reach Link data (takedowns, Creator removal, r
 - **A takedown targets Short codes:** one, or a list on stdin. `--reason` is required and is stored only in the audit record. The Creator sees `deleted_by: operator` and nothing more.
 - **`links find --target-host <host>`** streams the latest snapshot, the dailies and the minute objects from R2, and prints matching Short codes to pipe into a takedown.
   - There is no Target URL index in the shards, and a scan puts no load on them.
+  - `--deleted-since` and `--deleted-by` list deletes the same way, to pipe into a Void ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)).
 - **An Expired link is taken down like a live one.** The tombstone drops its Target URL from `LINKS`.
 - **An already Deleted link is left alone.** Its `deleted_by` is never overwritten, because live → deleted is the only change a row can make. The audit record marks it `already_deleted`. This matches how the Link API treats a Creator's delete ([ADR 0009](./0009-idempotent-link-creation-by-key-derived-short-codes.md)'s ticket).
+
+### Voiding a delete
+
+- **`links void` cancels a delete,** a Creator's or a Takedown: Short URLs on stdin, `--reason` required. The Link is live again with every field as it was. [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md) holds the steps, the void record and the rule on which deletes the Operator voids.
+- **A Link whose Creator was removed with its Links is refused.** The `removed_with_links` flag below would take it down again on arrival.
 
 ### Removing a Creator with its Links
 
@@ -114,11 +122,12 @@ A shard rewound by point-in-time recovery, or rebuilt from the log, lacks every 
 
 Point-in-time recovery also rewinds anything the shard stores about itself, so the freeze lives in `FLAGS`, which `links-data` already writes:
 1. The job writes `frozen:<nn>` and sleeps about 2 minutes so every colo sees it.
-2. It restores and reconciles.
+2. It has the shard drain its outbox once, so no acknowledged delete is rewound ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)), then restores and reconciles. `--skip-drain` is for a shard too broken to drain.
 3. It deletes the flag.
 
 While a shard is frozen:
 - **Creates:** a generated code that lands on the frozen shard is redrawn; 255 times in 256 the new code lands on another shard. A Custom alias or keyed create for that shard answers `503` with `Retry-After`.
+- **Deletes:** a Creator's delete answers `503` with `Retry-After`. A Takedown or a Void of a Link on that shard waits and retries.
 - **Its drain pauses:** the alarm handler reads the flag and sends nothing. Nothing is lost, because the reconcile re-drives every destination.
 - **Redirects carry on,** from KV and the fallback to the shard.
 - **Restoring the whole namespace freezes all 256 shards.**
@@ -129,12 +138,14 @@ While a shard is frozen:
 - **Point-in-time recovery** runs inside the shard: `getBookmarkForTime`, then `onNextSessionRestoreBookmark`, then `ctx.abort()`. The undo bookmark that `onNextSessionRestoreBookmark` returns goes into the audit record, so a wrong restore can itself be undone within 30 days.
 - **Rolling back past an incident has a review gate.** The reconcile re-inserts every code in `LINKS` that the shard lacks, including bad rows the incident already pushed to KV. So review must come before the reconcile:
   1. Freeze the shard, then restore it to before the incident (point-in-time recovery plus the log, or log replay alone).
-  2. Write every log entry after the restore point to `ops/<op_id>/after-restore-point.ndjson.gz`, then wait with `waitForEvent('reviewed')` for up to 7 days.
+  2. Write every log entry after the restore point to `review/<op_id>/after-restore-point.ndjson.gz`, then wait with `waitForEvent('reviewed')` for up to 7 days.
   3. The Operator runs `ops review <op> --claim-only <file>`, listing the Short codes whose later rows were bad.
   4. Re-apply the later entries. Accepted rows go in as full rows. Claim-only rows go in as Deleted links with `deleted_by='operator'`, so their codes stay taken.
   5. Reconcile, then unfreeze. The reconcile now finds only codes the log never received. The report lists them.
 
   If no review arrives in 7 days, the step fails and the shard stays frozen.
+
+  The review file is working data, not an audit record ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)). It holds full rows, so `review/` has no bucket lock, and the operation deletes the file as its last step or on `ops cancel`. The audit record keeps the claim-only list, the counts and the file's SHA-256.
 - **Restores that fix no bad data skip the review.** These are a deleted namespace and a lost bucket.
 - **Re-seeding a lost bucket:** each shard scans its `links` table in primary-key order, which is Short code order. It writes a full snapshot named by the time the scan started. The log keeps running during the scan, so the snapshot plus every minute object since that time is complete.
 
@@ -164,8 +175,8 @@ Workflow steps are billed. Workers Paid includes 500,000 a month, then $0.80 per
 
 - **Anyone with Editor on `links-data` can read and write shard SQL directly,** through `query/v2`, Data Studio or `wrangler dev --remote`. That includes `production-admin`'s token and the `operator` token. The protection is who holds those tokens, not the Worker's surface.
 - **Every create does one more KV read**, of the freeze flag for its shard (cached per colo). So does every drain alarm.
-- **Creates of a Custom alias or a keyed code can fail with `503`** while their shard is being restored. They reuse the Link API's existing `503 unavailable` with `Retry-After`, so the catalog is unchanged.
+- **Creates of a Custom alias or a keyed code, and deletes, can fail with `503`** while their shard is being restored. They reuse the Link API's existing `503 unavailable` with `Retry-After`, so the catalog is unchanged.
 - **A rollback can leave a shard frozen for up to 7 days** while it waits for review.
-- **The backup bucket gains `ops/`,** locked for 90 days and never retired.
+- **The backup bucket gains `ops/`,** locked for 90 days and never retired, and `review/`, unlocked and emptied as each rollback ends.
 - **Restore drills belong in a preview.** A preview runs the same Workflows against its own `links-data`, and its bucket has no lock.
 - **Workflow limits and pricing are now a dependency:** the step limit, 30-day retention and billed steps. Pages must stay large enough that a shard's job fits the step limit as shards grow.

@@ -10,6 +10,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's erasure time counts the off-account copy, as ADR 0025 says.
 
+> Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): the Operator can void a forged or mistaken delete, which returns the Link with every field as it was; a Creator still has no undelete. The invariant's "never unset" excepts a voided delete. A restore no longer loses an acknowledged delete.
+
 # Links are immutable, and deleting a Link erases its Target URL
 
 Immutability was never decided on its own. [ADR 0006](./0006-redirect-caching-kv-values-colo-cache-no-store.md) called changing a Target URL or Expiry "off the table" because the caches had no invalidation story, and [ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md) built the change log on the premise that "a Link's fields never change", so replay merges entries in any order by "the deleted one wins". The PRD's [features review](https://github.com/andrewferk/url-shortener/issues/40#issuecomment-5942436020) found the cache reason weak (an edit would ride the same outbox and TTLs as a delete, about 90 s) and the log the real blocker, and asked for editing to be decided on its merits. The [security review](https://github.com/andrewferk/url-shortener/issues/40#issuecomment-5942073170) found the opposite gap: a Deleted link keeps its Target URL forever in the shard, the Creator list and the locked change log, and Target URLs often carry tokens or personal data.
@@ -22,11 +24,11 @@ Decided in [Can a Link's fields ever change or be erased?](https://github.com/an
 
 ### A Link's fields never change
 
-- **The Target URL, Expiry, Custom alias flag, Creator and creation time are fixed when the Link is created.** There is no edit, no extending or removing an Expiry, no undelete and no pause. The only change a Link ever makes is live → deleted, once.
+- **The Target URL, Expiry, Custom alias flag, Creator and creation time are fixed when the Link is created.** There is no edit, no extending or removing an Expiry, no undelete for a Creator and no pause. The only change a Link makes is live → deleted. The one way back is the Operator's Void of a forged or mistaken delete ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)), which returns the Link with every field as it was.
 - **This is a property of the service, not a limitation.** Three independent lines land on the same side:
   - **Visitors.** A Short URL that is printed, shared or scanned must keep meaning what it meant. Abuse guidance for shorteners says the same: never change a Target URL, and answer 404 or 410 ([abuse research](https://github.com/andrewferk/url-shortener/issues/47#issuecomment-5942711906)).
   - **Integrity.** With nothing allowed to change, a Target URL that differs between two live records of one Link is tampering by definition. That gives [How is a silent Redirect hijack detected?](https://github.com/andrewferk/url-shortener/issues/56) a sharp invariant (below).
-  - **Replay.** ADR 0008's merge rule stays "the deleted one wins", with no version column. Restores, drills and compaction keep working in any order.
+  - **Replay.** ADR 0008's merge rule stays "the deleted one wins", with no version column. Restores, drills and compaction keep working in any order. ADR 0028's one exception, a delete named in a void record, needs no ordering either.
 - **This is "never", not "not yet".** The change log does not gain a `version` column as insurance. Keeping the door open would weaken the integrity invariant for a feature this ADR rules out.
 - **The Link API has no update operation,** and `docs/api/openapi.yaml` defines none. The fix for a wrong Target URL or Expiry is to delete the Link and create another.
 - **A typo behind a Custom alias burns that alias.** Short codes are never reissued ([ADR 0002](./0002-random-short-codes-claimed-by-conditional-insert.md)), so a Creator who deletes `launch` because its Target URL was wrong cannot claim `launch` again, even for itself. This is accepted, and the Link API docs say so: check the Target URL before claiming an alias. There is no reclaim window, because a reissue to the same Creator still re-points a Short URL Visitors may already have followed.
@@ -54,13 +56,15 @@ Every deletion erases: a Creator's delete, an Operator's takedown, and `creators
 - **The Operator's audit record keeps the full Target URL.** A takedown's and a Creator removal's `ops/` record (ADR 0010) lists every Link it deleted with its Target URL. That is the Operator's own evidence for the abuse report it acted on. The records are locked for 90 days and never retired by compaction, so this is the one place a taken-down URL outlives three months, and it is the Operator's to delete once the lock passes, which is the honest answer to an erasure request about a taken-down Link.
 - **Deletion is the only erasure path.** An Expired link isn't deleted, so it keeps its Target URL and the API still shows it; the Creator deletes it to erase it. A third party whose personal data sits in a live Link's URL is served by a takedown.
 - **Erasure is eventual across restores.** Point-in-time recovery to before a delete brings the row back, URL and all, until the log replay that every restore runs re-applies the scrubbed delete. The recovery window is 30 days, so that is the longest a URL can resurface.
+- **A restore never loses an acknowledged delete** ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)). A frozen shard refuses deletes, the restore drains the outbox before it rewinds, and the reconcile deletes a live row whose `LINKS` value is a tombstone.
+- **A Void brings the Target URL back to every copy.** It reads the URL from the change log's live entry, so it works only until that entry retires, about three months after the delete.
 
 ### The invariant handed to hijack detection
 
 For one `(Namespace, Short code)`, across every record the change log holds:
 
 - `created_at`, `creator_id`, `custom_alias`, `expires_at` and `idempotency_key` never differ;
-- `deleted_at` and `deleted_by` are set at most once and never unset;
+- `deleted_at` and `deleted_by` are set at most once and never unset, except by a Void: a deleted entry named in a void record counts as absent (ADR 0028);
 - `target_url` differs only between a live entry and a deleted entry, and then the deleted entry's `target_url_sha256` equals the hash of the live entry's `target_url`.
 
 Anything else is tampering. Whether compaction checks it, and what it alerts, is decided in [How is a silent Redirect hijack detected?](https://github.com/andrewferk/url-shortener/issues/56).
@@ -86,7 +90,7 @@ No slice moves between milestones.
 - **An editable Target URL,** versioned: an additive `version` column and "highest version wins, deleted wins ties". It is reopenable without touching a permanent format, and it is the most-asked-for shortener feature the design omits (fixing a typo, re-pointing a printed QR code). Rejected because a re-pointed Short URL is the hijack this service most needs to be able to rule out, abuse guidance says never to do it, and it reworks restores, drills and the glossary for a feature that delete-and-create replaces.
 - **"Not now, maybe later":** keep the API immutable but write the versioned merge rule from slice 6.1 so the door stays open. Rejected because the open door is what the integrity invariant would have to tolerate.
 - **Extend-only Expiry changes.** The one Expiry edit with a real use (a campaign that runs over). Rejected: it alone would force the versioned merge rule, and a new Link does the job.
-- **Pause as a fourth Link state, or undelete.** Both are a Deleted link coming back, which breaks "deleted wins" and the glossary's "the deletion is permanent". The Operator's takedown already covers "under investigation", one way.
+- **Pause as a fourth Link state, or undelete.** Both are a Deleted link coming back, which breaks "deleted wins" and the glossary's "the deletion is permanent". The Operator's takedown already covers "under investigation", one way. ADR 0028's Void is neither: it corrects a delete that should never have been made, and only the Operator can run it.
 - **A reclaim window** for a Creator's own just-deleted alias. A reissue in all but name, and a hijack window.
 - **A `dry_run` on create.** It catches alias typos, not Target URL typos.
 - **Keep the Target URL forever** (ADR 0008 as written), "as the record of what was taken down". Rejected: there was no erasure path at all, and the Operator's evidence belongs in the audit record, not in a row every copy carries.

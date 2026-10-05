@@ -28,6 +28,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the namespace table follows ADR 0022's `brake:<utc-hour>` and ADR 0024's `AUTH` writer and binding. The shard hash input, the Deleted link's Target URL and the "can lose everything" consequence follow ADRs 0014, 0018, 0019 and 0025.
 
+> Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a tombstone carries `deleted_at` and `deleted_by`, so a shard rebuilt from `LINKS` keeps them. The merge rule is "the deleted one wins, unless that delete is voided", with void records under `log/void/`. The reconcile deletes a live row whose `LINKS` value is a tombstone. The bucket gains an unlocked `review/` prefix for the rollback review file.
+
 # Place Links by SHA-256, keep each Link's row as its own tombstone, make KV a full second copy, and log every shard change to a locked R2 bucket
 
 [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) put every Link in one of 256 SQLite Durable Object shards, projected into Workers KV for Redirects and into one Durable Object per Creator for listing. This ADR fixes the shapes those three copies take and how they're kept recoverable.
@@ -117,8 +119,8 @@ CREATE TABLE outbox (
   - This format is as permanent as the hash.
 - **`LINKS` values** are versioned JSON, read with `type: "json"`:
   - live: `{"v":1,"t":"<Target URL>","e":<Expiry ms>,"c":"<Creator ID>","ts":<created_at ms>}`. The `e` is left out when there's no Expiry.
-  - deleted: `{"v":1,"d":1,"c":"<Creator ID>","ts":<created_at ms>}`. A tombstone drops the Target URL and the Expiry, so a takedown removes the URL from the public read copy.
-  - `c` and `ts` aren't needed to Redirect. They make KV a complete second copy of every Link except deletion details, so the shards can be rebuilt from it. With the change log in place, they cover only what the log can't: its last minute, and losing the backup bucket together with `links-data`. They cost $0 today. `c` stays for good: per-Creator analytics would need the Creator ID on the read path, and adding it back later would mean rewriting every value.
+  - deleted: `{"v":1,"d":1,"c":"<Creator ID>","ts":<created_at ms>,"dt":<deleted_at ms>,"by":"creator"}`, where `by` is `creator` or `operator` ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)). A tombstone drops the Target URL and the Expiry, so a takedown removes the URL from the public read copy.
+  - `c` and `ts` aren't needed to Redirect. With `dt` and `by` on a tombstone, they make KV a second copy of every Link except a Deleted link's Target URL hash and any `Idempotency-Key`, so the shards can be rebuilt from it. With the change log in place, they cover only what the log can't: its last minute, and losing the backup bucket together with `links-data`. They cost $0 today. `c` stays for good: per-Creator analytics would need the Creator ID on the read path, and adding it back later would mean rewriting every value.
   - Nothing goes in KV metadata.
   - The shard answers the Worker's KV-miss fallback with the same value shape.
 
@@ -180,14 +182,15 @@ CREATE TABLE links (
   - **Entries** are full current rows, as gzipped NDJSON sorted by Short code. A retried write can duplicate entries, which is harmless.
   - **Batched per shard, at most once a minute.** A `log` item becomes due no sooner than 60 s after the shard's last log write. The drain then writes every due `log` item as one object, `log/minute/<nn>/<yyyy-mm-dd>/<timestamp>-<random>.ndjson.gz`. R2 objects can't be appended to, and one object per change would cost about $90–1,350/mo at peak in write operations.
   - **Replay needs no ordering.** A Link's fields never change, and the only change a row can make is live → deleted. So merging entries for the same Short code is "the deleted one wins": replay works in any order and in parallel.
+  - **A voided delete is the one exception** ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)). A void record under `log/void/<nn>/` names a Link and the `deleted_at` it voids, and replay and compaction treat that deleted entry as absent. This needs no ordering either.
   - **Replay can stop at a point in time.** The rows carry `created_at` and `deleted_at`, so replaying "as of T" ignores creates and deletes at or after T. That gives point-in-time recovery for as long as the log is kept, not just 30 days.
 - **Compaction** is a Cron Trigger on `links-data`, run as a streaming merge per shard. That works because every object is sorted by Short code.
   - **Daily:** it merges yesterday's minute objects into `log/daily/<nn>/<yyyy-mm-dd>.ndjson.gz`.
   - **Monthly:** it merges the previous snapshot with that month's dailies into `log/snapshot/<nn>/<yyyy-mm>.ndjson.gz`. It never scans a shard.
   - **Recovery reads the latest snapshot, then the dailies since, then the minute objects since.**
 - **The bucket** is an R2 bucket in the prod account, owned by `infra/env` with `prevent_destroy`, and bound only to `links-data`.
-  - **Bucket locks per prefix** (`cloudflare_r2_bucket_lock`): minute objects are locked for 2 days; dailies, snapshots and `auth/` for 90 days.
-  - **No lifecycle rule expires anything.** Compaction retires an object only once a newer object covering it has been written and its lock has passed. So a stuck compaction grows the bucket instead of losing data. It keeps the last three snapshots and every daily since the oldest of them, which is about three months of point-in-time replay.
+  - **Bucket locks per prefix** (`cloudflare_r2_bucket_lock`): minute objects are locked for 2 days; dailies, snapshots, void records and `auth/` for 90 days. The `review/` prefix, which holds a rollback's review file while it is being reviewed, has no lock.
+  - **No lifecycle rule expires anything.** Compaction retires an object only once a newer object covering it has been written and its lock has passed. So a stuck compaction grows the bucket instead of losing data. It keeps the last three snapshots and every daily since the oldest of them, which is about three months of point-in-time replay. Void records are never retired. A review file is deleted by its operation, and compaction removes any older than 30 days.
   - **The lock guards against accidents, not against an admin:** anyone with R2 write can remove the rule first. The rules live in OpenTofu, so removing one shows up in a PR.
 - **`AUTH` backups:** the Operator CLI gains `backup` and `restore`.
   - `backup` exports `AUTH` to `auth/<timestamp>.json.gz` in the same bucket. It holds only hashes, so it's safe to store, and it's never retired.
@@ -198,7 +201,8 @@ CREATE TABLE links (
 **Every restore ends with a reconcile, because a restore must never forget a claimed Short code.** A shard restored to an earlier point, or rebuilt from the log, can lack codes claimed since. `LINKS` still holds them, so the shard could reissue one. The reconcile:
 1. lists the shard's `LINKS` prefix;
 2. re-inserts every Short code the shard lacks, as a full row (this also enqueues it to `log`);
-3. re-drives the `kv` and `creator` destinations for the shard.
+3. deletes every live row whose `LINKS` value is a tombstone, with the tombstone's `deleted_at` and `deleted_by`, unless a void record names that `deleted_at`. Such a tombstone is a delete the restore lost ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md));
+4. re-drives the `kv` and `creator` destinations for the shard.
 
 **Rolling back past an incident doesn't drop what came after it.** Log entries after the stopping point are reviewed and re-applied, at the least as claims, so a rollback fixes the bad rows without forgetting any Short code.
 
@@ -257,7 +261,7 @@ This stays inside ADR 0001's ≈$11–25k/mo peak range.
 - **Losing the whole prod account, or a compromised Operator token, can lose everything,** because the bucket lock can be removed by anyone with R2 write. This is an accepted risk for now. It is revisited at ADR 0007's trigger, the first real Creator, when the preview account split happens anyway. [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md) reversed this: with the off-account copy, losing the prod account or every in-account backup no longer loses everything.
 - **If `links-data` and `LINKS` are lost together,** only changes not yet in the log are gone: about the last minute. Nothing records those Short codes, so they could be reissued. That's the one case where ADR 0002's guarantee doesn't hold.
 - **Compaction must be monitored.** It never loses data, because objects are retired only once covered. But while it's stuck, minute objects pile up and recovery gets slower.
-- **A shard rebuilt from `LINKS` loses deletion details.** A tombstone in KV says a Link was deleted, but not when or by whom.
+- **A shard rebuilt from `LINKS` loses a Deleted link's Target URL hash.** A tombstone in KV says when a Link was deleted and by whom (ADR 0028), but it never held the URL or its hash. As first decided, it lost when and by whom too.
 - **The Link API ticket inherits:**
   - the Target URL size budget;
   - the cursor shape;

@@ -16,6 +16,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the body's "daily cost brake" and its reason for immutability follow ADRs 0022 and 0019.
 
+> Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a tombstone also carries `deleted_at` and `deleted_by`, as `dt` and `by`.
+
 # Cache Redirects only inside the Worker: a 30 s per-colo cache in front of a 30 s KV cache, `no-store` to browsers, and no purge
 
 Every Redirect runs the Worker ([ADR 0003](./0003-status-page-from-redirect-events-and-external-probes.md)), and the zone cache sits behind the Worker, so it never sees a Redirect. That leaves two caches that matter: KV's own edge cache, and whatever the Visitor's browser keeps. We assume Workers KV bills every read, per key, whether or not its edge cache served it. Cloudflare's pricing page says "All operations incur charges" and lists no exemption, but no page mentions cached reads, so a spike measures it (see [The billing assumption](#the-billing-assumption)). On that assumption KV's `cacheTtl` buys latency, not money. [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md) priced peak KV reads at a 90% edge hit ratio as if cached reads were free. Only a cache the Worker owns makes that figure true, and the Cache API is free. We put a short per-colo cache in front of KV and keep browsers out of it entirely. Nothing is purged: deletion is bounded by the TTLs alone.

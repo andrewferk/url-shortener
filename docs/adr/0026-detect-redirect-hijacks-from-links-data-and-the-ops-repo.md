@@ -6,6 +6,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the signing key's rotation gets a trigger, by event. The findings email is tied to ADR 0011's no-links rule.
 
+> Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a forged delete is recovered by a Void. The sweep alerts on a tombstone over a live row and heals neither side. The invariant check treats a voided delete as absent, and a forged void record is unsigned, so it is skipped.
+
 # Detect Redirect hijacks from `links-data` and the ops repo: sweep `LINKS` against the shards, sign the change log, and compare the live zone and Workers with `main` every hour
 
 Rewriting where Short URLs go is the highest-value attack on a shortener, and nothing in the design would notice it. [ADR 0024](./0024-state-what-each-credential-can-do-gate-operator-methods-and-move-auth-writes-into-links-data.md) says the unattended `production` token can answer Visitors anything and rewrite `LINKS`, and that recovery "depends on someone noticing within the window". [ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md)'s watch covers resources, not data, and skips Worker deploys, routes and Email Routing.
@@ -31,13 +33,14 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 
 - **A Cron Trigger on `links-data` sweeps every shard** once per `integrity_sweep_hours` (24), a few shards per hourly run. For each shard it lists the shard's `LINKS` prefix ([ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md)) and compares every value with its shard row, both ways.
 - **A row whose value is wrong or missing** is tampering or a stuck outbox. The sweep alerts and heals it by re-driving the row through the outbox. The shard is the truth, and this is what a reconcile does.
+- **A tombstone over a live row is the exception** ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)). It is a delete a restore lost, or a forged tombstone, and only the Operator can tell. The sweep alerts and heals neither side; the Operator settles it with a Takedown or a re-drive.
 - **A `LINKS` key with no shard row** is a forged Link. The sweep alerts and leaves the key alone: after a restore, such a key is a claimed Short code the reconcile must keep (ADR 0008), so only the Operator can tell the two apart.
 - **A frozen shard is skipped** ([ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md)).
 - **`LINKS` only.** `AUTH` and `FLAGS` are not swept. Tampering there does not re-point a Short URL, and ADR 0024's runbook diffs and restores them.
 
 ### The change log is checked and signed
 
-- **Compaction checks [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md)'s invariant** as it merges. On a violation it alerts, stops that shard's compaction and keeps every object involved. A stuck compaction loses nothing (ADR 0008), and merging a tampered entry would launder it into a daily object.
+- **Compaction checks [ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md)'s invariant** as it merges. On a violation it alerts, stops that shard's compaction and keeps every object involved. A stuck compaction loses nothing (ADR 0008), and merging a tampered entry would launder it into a daily object. A deleted entry named in a signed void record counts as absent, so a voided Link's live entry is not a violation.
 - **Compaction resumes through an Operator operation** that names the objects to drop or keep, with an `ops/` audit record like any other (ADR 0010).
 - **`links-data` signs every object it writes to the backup bucket:** minute objects, dailies, snapshots, `auth/` exports, `ops/` records and [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md)'s `offsite/` markers.
   - The signature is HMAC-SHA-256 over the object's key and body, stored with a key ID in the object's custom metadata. Signing the key stops a genuine object being copied to another name.
@@ -51,7 +54,7 @@ Decided in [How is a silent Redirect hijack detected?](https://github.com/andrew
 
 - **The same cron counts Creator deletes** across the shards for the last hour and alerts above `delete_alert_per_hour` (300, one Creator's whole daily cap). ADR 0024 lets the stolen token mint a key and delete Links as any Creator, and every delete passes through a shard.
 - **Takedowns are not counted.** They already write `ops/` records, and [ADR 0023](./0023-take-abuse-reports-at-abuse-alert-at-the-daily-cap-and-suspend-past-a-daily-ceiling.md)'s daily-ceiling Takedowns are expected bursts.
-- **Alert only.** Deletes are recoverable for 30 days, and pausing deletes would give an attacker a way to block real Creators.
+- **Alert only.** A forged delete is recoverable by a Void for about three months (ADR 0028), and pausing deletes would give an attacker a way to block real Creators.
 
 ### The ops repo compares the live deployment with `main` every hour
 

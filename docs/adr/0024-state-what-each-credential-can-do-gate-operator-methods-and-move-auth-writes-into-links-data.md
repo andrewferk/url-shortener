@@ -10,6 +10,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the weekly drift job is the hourly integrity job in the body too (ADR 0026), and the change log's erasure time counts the off-account copy (ADR 0025).
 
+> Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a forged delete is recovered by a Void for about three months, not by point-in-time recovery, which re-applies the delete. The shard's `void` method is gated.
+
 # State what each credential can do to Link data, gate Operator methods with a secret, move `AUTH` writes into `links-data`, and take the backup locks out of CI's reach
 
 [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) says "nothing that runs unattended in prod can delete anything". It reasons about API-token permissions, and it is false for data. A token that can deploy a Worker controls everything that Worker can bind, and three Cloudflare facts mean a binding can't be fenced:
@@ -26,11 +28,11 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 
 ### The claim
 
-**No unattended credential can irrecoverably destroy Link data, or delete a resource, a lock or a backup. No credential held in GitHub, attended or not, can remove a backup.** The unattended `production` token can corrupt the read copies and delete Links, and all of that is recoverable for at least 30 days.
+**No unattended credential can irrecoverably destroy Link data, or delete a resource, a lock or a backup. No credential held in GitHub, attended or not, can remove a backup.** The unattended `production` token can corrupt the read copies and delete Links, and all of that is recoverable: the read copies by a reconcile, and a forged delete by a Void for about three months ([ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md)).
 
 | Credential | Attended? | Can do to Link data | Cannot | Recovery |
 |---|---|---|---|---|
-| `production` (deploys `redirect` and `status`) | No | Answer Visitors anything; rewrite or delete `LINKS`, `AUTH` (minting keys) and `FLAGS` (the brake, freezes, suspensions); delete any Link through the Creator path; create Links as any Creator; add objects to the backup bucket; write the Status database | Call an Operator method; run SQL on shards; change `links-data`; delete a resource; remove a lock or a locked object | Reconcile `LINKS` and `FLAGS` from the shards and Creator objects; restore `AUTH` from a locked export; point-in-time recovery (30 days) and the change log |
+| `production` (deploys `redirect` and `status`) | No | Answer Visitors anything; rewrite or delete `LINKS`, `AUTH` (minting keys) and `FLAGS` (the brake, freezes, suspensions); delete any Link through the Creator path; create Links as any Creator; add objects to the backup bucket; write the Status database | Call an Operator method; run SQL on shards; change `links-data`; delete a resource; remove a lock or a locked object | Reconcile `LINKS` and `FLAGS` from the shards and Creator objects; restore `AUTH` from a locked export; void forged deletes from the change log (about three months, ADR 0028) |
 | `production-plan` | No | Read all of KV and the Status database | Write anything | Not needed |
 | The Status Worker's read tokens | No | Read analytics and audit logs | Write anything | Not needed |
 | `production-admin` (deploys `links-data`) | Approved each run | Everything `links-data` can, including wiping shards; delete KV namespaces and the Status database | Remove a lock or a locked backup; delete a Worker | Replay the locked change log; reconcile `LINKS`; restore `AUTH` from a locked export |
@@ -46,14 +48,14 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 
 - **Every `links-data` deploy generates a random 256-bit `OPERATOR_GATE`** and pushes it as a Worker secret with that deploy. It is never stored or logged anywhere else, and nobody needs to know it.
 - **A gated method takes the gate as an argument** and compares it, in constant time, with the value in its own environment. Workflows, the outbox and the Creator objects run in `links-data`, so they read it from their environment and pass it. `redirect` can't read another Worker's secret.
-- **Ungated methods are exactly what the Link API and the Redirect fallback call:** create, read, list and a Creator's own delete. Everything else is gated: Takedowns, Creator removal and suspension, freezes, restores, re-drives, reconcile inserts, snapshots, and the calls between shards and Creator objects.
+- **Ungated methods are exactly what the Link API and the Redirect fallback call:** create, read, list and a Creator's own delete. Everything else is gated: Takedowns, Voids, Creator removal and suspension, freezes, restores, re-drives, reconcile inserts, snapshots, and the calls between shards and Creator objects.
 - **The ungated delete can never record the Operator as the deleter.** `deleted_by='operator'` is set only by a gated method.
 - **A step that straddles a deploy can see a mismatch.** It fails and retries against the new version; every step can already run twice ([ADR 0010](./0010-operator-operations-as-workflows-and-shard-freezes.md)).
 - **The gate doesn't rely on binding topology.** Whether a per-Worker Editor token can add a `script_name` Durable Object binding or a service binding is undocumented. `doctor` reports it, and nothing here depends on the answer.
 
 ### What `redirect` can still do is accepted
 
-- **Mass delete through the Creator path.** `redirect` authenticates Creators, so its code can call the ordinary delete for any Link with the Creator ID it reads from `LINKS`. Each delete erases the Target URL in the shard ([ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md)). Recovery is point-in-time recovery within 30 days, or the change log until "deleted wins" compaction clears it in about three months (about four counting the off-account copy, ADR 0025).
+- **Mass delete through the Creator path.** `redirect` authenticates Creators, so its code can call the ordinary delete for any Link with the Creator ID it reads from `LINKS`. Each delete erases the Target URL in the shard ([ADR 0019](./0019-links-are-immutable-and-deletion-erases-the-target-url.md)). Recovery is a Void (ADR 0028): the Operator lists the forged deletes with `links find --deleted-since` and voids them, which reads each Target URL back from the change log's live entry. That works until compaction retires the entry, about three months after the delete. Point-in-time recovery doesn't recover a delete, because every restore re-applies it from the log.
 - **KV writes.** `redirect` must read `LINKS`, `AUTH` and `FLAGS`, and a read binding is a write binding. Moving the legitimate writes elsewhere would change nothing.
 - **After a suspected `production` compromise** the runbook is: roll the token, redeploy `redirect` and `status` from a known commit, reconcile `LINKS` and `FLAGS`, diff `AUTH` against the latest locked `auth/` export and restore it, and review what was added to the bucket.
 
