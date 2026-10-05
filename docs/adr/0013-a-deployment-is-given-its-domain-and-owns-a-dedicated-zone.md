@@ -16,6 +16,8 @@ status: accepted
 
 > Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): Email Routing and the `abuse@` rule live in a hand-applied configuration in `infra/bootstrap`, not in `infra/zone`.
 
+> Amended by [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md): the renewal is budgeted against an ordinary month ($10 of Workers Paid after the account split), not a worst month.
+
 # A deployment is given its domain and owns a dedicated zone
 
 The project is headed for open source. It should run as its own service, be embeddable in another service, and not rule out a SaaS built on it. So no decision names a domain. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) already takes the Short domain as an input (`base_domain`, `preview_base_domain`) and derives every hostname from it. This ADR states what a deployment requires of that domain, and what it does to the zone.
@@ -74,7 +76,7 @@ This is guidance for operators, written into the build's docs. It isn't decided 
 - **The domain can never change** once Links are shared. Losing it breaks every short URL ever issued.
 - **Prefer gTLDs, or long-established ccTLDs with open registration.** Avoid TLDs with a retirement or seizure risk: `.io` could be retired if its territory's code is withdrawn, and Libya has revoked `.ly` domains over the content they pointed to.
 - **Avoid TLDs with bad abuse reputations,** such as `.cc` and `.click`. Mail and security filters punish them, and shorteners are already filtered.
-- **Budget the renewal against the worst month.** At ADR 0004's defaults, Workers Paid ($5) plus a month of the cost brake's ceiling (about $13) leaves about $24 a year for the domain within $20 a month.
+- **Budget the renewal against an ordinary month** ([ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md)). Workers Paid is $5 until the preview account split and $10 after it, which leaves $10 a month, about $120 a year, for the domain within $20 a month. A month under attack has no cap, so no renewal price protects against one.
 - **Short names are often registry-premium,** at hundreds of dollars a year. Check the renewal price at checkout.
 - **Cloudflare Registrar** charges renewals at cost and gives one-click DNSSEC. [ADR 0025](./0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md) advises against it all the same: keep the registrar outside the prod Cloudflare account.
 

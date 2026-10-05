@@ -36,6 +36,8 @@ status: accepted
 
 > Amended by [ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md): Email Routing moves from `infra/zone` to a hand-applied configuration in `infra/bootstrap`, so the `production` token drops its Email Routing permissions. `production-plan` gains Workers Routes Read, and the hourly integrity job lists the zone's rulesets and Workers Routes. `creators add` reads a signed `offsite/last-complete` record, not a `FLAGS` key.
 
+> Amended by [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md): `infra/env` takes `spend_alert_dollars_per_day` (default 1), and each environment gets a second Analytics Engine dataset, `request_events_<env>`, bound to the `redirect` and `status` Workers.
+
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 
 Cloudflare has no lock, trash or restore for a deleted Worker, KV namespace, D1 database or Durable Object namespace. Deleting a Worker also deletes the Durable Object namespaces it implements, so under [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)'s single Worker, one wrong delete loses every Link and tombstone. So the layout is designed around what each credential *can* destroy.
@@ -78,7 +80,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
 - **The glue:** a repo script renders each Worker's Wrangler config from `tofu output -json` for the environment. The rendered config holds:
   - resource IDs;
   - routes;
-  - the Analytics Engine dataset name;
+  - the Analytics Engine dataset names;
   - rate limiter namespace IDs;
   - every variable in the parameters table below.
 
@@ -134,7 +136,7 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
 - **A preview is a full copy of the environment-scoped stack:**
   - its own three Workers and Durable Object namespaces;
   - its own KV (as ADR 0005 requires) and D1;
-  - its own Analytics Engine dataset, `redirect_events_<env>`;
+  - its own Analytics Engine datasets, `redirect_events_<env>` and `request_events_<env>` ([ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md));
   - a Canary link, created by the post-deploy step in ADR 0003.
 - **Previews get no Probes.** Prod's three locations every 2 minutes, with the Status page check, already use about 75.9k of Grafana Free's 100k monthly executions ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)). A preview's Status page shows the uptime section as "no Probes in this environment".
 - **Teardown order:**
@@ -161,6 +163,7 @@ These are variables of `infra/env`. They reach the Workers through the rendered 
 | `creator_burst_per_minute`, `creator_daily_link_cap` (ADR 0004) | 60, 300 | 60, 300 |
 | `creator_daily_link_ceiling` (ADR 0023) | 600 | 600 |
 | `flood_alert_requests_per_second` (ADR 0022; the alert is sent in prod only) | 100 | 100 |
+| `spend_alert_dollars_per_day` (ADR 0030; the alert is sent in prod only) | 1 | 1 |
 | `abuse_response_hours` (ADR 0023) | 24 | 24 |
 | `probes_enabled` | true | false |
 | OIDC trust ([ADR 0005](./0005-creator-api-keys-and-github-oidc-for-ci.md)): `repository_id`, `environment` claim, `aud` | `production`, the `api.` origin | `preview`, the `pr-<n>-api` origin |

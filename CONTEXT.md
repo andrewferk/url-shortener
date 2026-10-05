@@ -117,9 +117,9 @@ _Avoid_: Allowance
 The record of one Redirect: its Short code, outcome, and duration.
 _Avoid_: Hit, click (reserved for future click analytics)
 
-**Redirect flood**:
-Redirect volume, of every outcome, sustained above the rate the Operator has set as abnormal. It is a cost signal, not a verdict that the traffic is hostile.
-_Avoid_: Attack, spike, DDoS
+**Request flood**:
+Request volume across the deployment's hostnames (Redirects, the Link API and the Status page), sustained above the rate the Operator has set as abnormal. It is a cost signal, not a verdict that the traffic is hostile.
+_Avoid_: Redirect flood, attack, spike, DDoS
 
 **Probe**:
 A synthetic Redirect request made from outside the service to measure uptime.

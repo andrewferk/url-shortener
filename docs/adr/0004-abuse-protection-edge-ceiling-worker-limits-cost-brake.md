@@ -16,6 +16,8 @@ status: accepted
 
 > Amended in place by [Bring older ADRs, the glossary and the PRD in line with their amendments](https://github.com/andrewferk/url-shortener/issues/75): the two guessing claims in the body follow ADR 0022.
 
+> Amended by [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md): the brake's bound is a count (125,000 shard lookups an hour, plus about 6 minutes of overshoot in every hour), and "about $13 a month" is no longer a worst case. A month under attack has no cap; the budget rule promises an ordinary month. The flood alert is "Request flood" and counts `api.` and `status.` requests too, and a "Request spend" alert catches slower spend.
+
 # Protect against abuse with one edge flood ceiling, Worker-side limits on the shard fallback and on Creators, and a daily cost brake
 
 On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)), Cloudflare gives us:
@@ -24,7 +26,7 @@ On the Free zone plan ([ADR 0001](./0001-cloudflare-workers-typescript-durable-o
 - unmetered DDoS mitigation;
 - no spend cap: budget alerts are informational and fire the next day.
 
-Every Worker request, KV read and Durable Object call is billed. The costly abuse is a flood of well-formed but unknown Short codes, because each one misses KV and falls back to its shard. So we block coarse floods at the edge, where blocked requests are never billed. The finer limits go inside the Worker, on exactly the expensive paths: the shard fallback and Link creation. A daily brake stops the shard fallback before an attack can blow the budget.
+Every Worker request, KV read and Durable Object call is billed. The costly abuse is a flood of well-formed but unknown Short codes, because each one misses KV and falls back to its shard. So we block coarse floods at the edge, where blocked requests are never billed. The finer limits go inside the Worker, on exactly the expensive paths: the shard fallback and Link creation. A brake stops the shard fallback, so a flood stays off the shards and its shard bill stays small.
 
 In priority order, we protect Redirect availability, then cost, then against Creator misuse, then against Short code guessing.
 
@@ -46,7 +48,7 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
   - Above **3M per UTC day**, it sets a KV flag that stays set until midnight UTC.
   - While the flag is set, a KV miss answers **503 with `Retry-After`** instead of calling the shard. We never claim a Link doesn't exist when we didn't check.
   - The Worker reads the flag only on the KV-miss path, cached for 60 s.
-  - 3M a day sustained for a month is about $13 of Durable Object requests, inside the budget's headroom. The threshold is an IaC variable.
+  - 3M a day sustained for a month is about $13 of Durable Object requests. That is a count the brake aims at, not a bound on the bill ([ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md)): under the hourly window a trip can be late by about 6 minutes in every hour, and the requests that carry the lookups cost more than the lookups do. The threshold is an IaC variable.
 - **Creator limits:** both numbers are IaC variables.
   - **Burst:** `creator_burst_per_minute` = 60, enforced by a Workers rate limiter keyed by Creator. Over it, the API answers 429 with `Retry-After`.
   - **Daily cap:** `creator_daily_link_cap` = **300**, a global circuit breaker per Creator.
@@ -87,8 +89,9 @@ Decided in [How are Redirects and Link creation protected from abuse?](https://g
 **Under attack:**
 - The edge ceiling costs nothing, because blocked requests aren't billed.
 - What gets past it is billed as Worker requests and KV reads, about $0.80 per extra 1M. Nothing on Free can cap that.
-- The brake caps only the Durable Object part.
-- The budget alert, [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md)'s flood alert and the manual levers cover the rest.
+- The brake limits only the Durable Object part: 125,000 lookups an hour, plus what arrives in the 6 minutes or so before a trip takes effect. A lookup adds $0.15 per 1M to a request that already costs $0.80.
+- The budget alert, the Request flood and Request spend alerts ([ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md), [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md)) and the manual levers cover the rest.
+- A month under attack has no cap. The ≤ $20 budget is a promise about an ordinary month (ADR 0030).
 
 ## Considered options
 
