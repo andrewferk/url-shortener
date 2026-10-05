@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-> Amended in place by [Spike: do environment secrets resolve across accounts inside a reusable workflow?](https://github.com/andrewferk/url-shortener/issues/91): the spike ran on 2026-10-05. Both rungs of the ladder failed. A third shape, not on the ladder, works and is the design: every reusable workflow declares the fixed names as optional and each ops repo's caller passes them by name. Reusable workflows stay, and the composite-action fallback is not taken.
+> Amended in place by [Spike: do environment secrets resolve across accounts inside a reusable workflow?](https://github.com/andrewferk/url-shortener/issues/91): the spike ran on 2026-10-05. Both rungs of the ladder failed. A third shape, not on the ladder, works and is the design: every reusable workflow declares the fixed names, required unless the contract marks one optional, and each ops repo's caller passes them by name. Reusable workflows stay, and the composite-action fallback is not taken.
 
 # Decide what six unverified facts do if they fail, and run the cross-account secrets spike before any workflow is written
 
@@ -25,18 +25,19 @@ Decided in [Give the six spikes without a fallback a decided outcome](https://gi
 
 ### Cross-account environment secrets: the ladder failed, a third rung works, and reusable workflows stay
 
-**What the spike found** (2026-10-05, [the write-up](https://github.com/andrewferk/url-shortener/issues/91#issuecomment-6004091117)):
+**What the spike found** (2026-10-05, [the write-up](https://github.com/andrewferk/url-shortener/issues/91#issuecomment-6004478902)):
 
 - **Both rungs below failed.** The called job's secret was empty with bare names ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37379086579)) and with the name declared as optional ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37379179132)). A control, an ordinary job of the caller's own in the same environment, read it ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37379025164)). Each job compared a hash of the secret, so a pass means the value arrived.
 - **A third rung, which the ladder didn't name, works** ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37380423993)), **and it is the design:**
-  - the reusable workflow declares each fixed name under `on.workflow_call.secrets` as optional, as in the second rung;
+  - the reusable workflow declares each fixed name under `on.workflow_call.secrets`, as in the second rung;
   - the caller passes each by name on its `uses:` line: `NAME: ${{ secrets.NAME }}`. In the caller that names a repo-level secret, which doesn't exist, so it passes nothing of value;
   - a called job that names an `environment` then reads that environment's secret under the name. GitHub's reusable-workflow docs say as much: the environment's secret is used, not the one passed.
+- **The names are declared `required: true`,** except any the contract marks optional (`STATE_PASSPHRASE_PREVIOUS`). The third rung ran with the name optional. A fourth run declared it required and passed too ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37382817625)): GitHub's required check accepts a name the caller passes with an empty value. GitHub documents that it refuses to start a run whose caller leaves a required secret out; the spike didn't run that case.
 - **It is taken over composite actions** because an ops repo still pins one thing and holds no job graph. Everything in ADR 0016 stands except how the names reach the job.
 - **What it changes:**
-  - every reusable workflow declares the fixed names it reads, all optional;
+  - every reusable workflow declares the fixed names it reads, required unless the contract marks one optional;
   - every caller in `examples/ops-repo/` carries the same fixed `secrets:` map, and each ops repo copies it;
-  - a release that adds a secret name changes the callers too, and says so under **Upgrading**. A name the caller's map leaves out arrives empty, as the second rung showed, so a job fails on an empty secret it requires and names it.
+  - a release that adds a secret name changes the callers too, and says so under **Upgrading**. A caller whose map leaves out a required name doesn't start. A secret missing from the environment still arrives empty, so a job fails on an empty secret it requires and names it.
 - **The ops repo holds no repo-level secret under a fixed name.** That was the spike's condition, and it keeps an environment the only source of each value.
 - **What the spike didn't test:** it ran one job in one environment. That each job of a workflow which crosses environments reads its own environment's value is expected from the same mechanism, and the first such workflow shows it.
 - **The composite-action shape below is not built.** It stays as the recorded alternative if GitHub changes this behaviour.
@@ -112,6 +113,7 @@ Decided in [Give the six spikes without a fallback a decided outcome](https://gi
 
 - **Composite actions on any failure,** skipping the second rung. The second rung costs one more spike run and keeps ADR 0016 whole.
 - **Composite actions once both rungs had failed,** as the ladder said. One more run found a shape that keeps reusable workflows for the price of a fixed `secrets:` map in each caller.
+- **Declaring every name optional,** as the third rung ran. A caller that left a name out would then start, and fail only when a job read the empty secret.
 - **Leaving the cross-account spike in slice 1.6.** It would run after slice 1.5 had built `deploy.yml` on the assumption.
 - **Keeping `use_lockfile` whatever the spike finds.** A lock that doesn't exclude is worse than none, because it reads as a guard.
 - **Rotating the passphrase only when an apply happens to be pending.** A rotation is by event (ADR 0027) and can't wait for one.
