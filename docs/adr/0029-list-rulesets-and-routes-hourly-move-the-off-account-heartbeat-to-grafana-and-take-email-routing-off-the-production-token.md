@@ -4,6 +4,8 @@ status: accepted
 
 > Amended by [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md): if `audit-read` can't read Audit Logs v1 under any permission, the hourly integrity job lists Email Routing rules and addresses, and that listing reports an added one.
 
+> Amended in place by [Which credential applies the DNS records in infra/zone?](https://github.com/andrewferk/url-shortener/issues/85): `production` holds no DNS permission and `infra/zone` holds no DNS records, so the hourly job lists no DNS records. The Email Routing configuration also holds the DMARC record.
+
 # List rulesets and routes hourly, move the off-account heartbeat to Grafana, take Email Routing off the `production` token, and check the backup bucket's location hint
 
 The 2026-10-04 audit found four gaps in what detects a change made with a stolen or misused credential, and in what a credential can reach:
@@ -30,7 +32,7 @@ Decided in [Settle the audit's detection and credential gaps](https://github.com
 - **The listing covers what the unattended `production` token can create,** and nothing else. Today that is zone rulesets and Workers Routes.
   - Page Rules, Snippets, Workers Custom Domains and account-level Bulk Redirects are left out because that token holds no permission for them. `production-admin` runs only under approval.
   - **A permission added to `production` brings its object type into the listing,** in the same change.
-  - DNS records follow the same rule. ADR 0007's table gives `production` no DNS permission, though `infra/zone` holds the DNS records that belong to no environment. If the token needs DNS edit to apply them, the job also lists the zone's DNS records and fails on one that no state holds.
+  - DNS records follow the same rule. `production` holds no DNS permission, and `infra/zone` holds no DNS records (ADR 0007), so the job lists none. The hourly plan of `env/prod` still shows drift on the records that root manages.
 - **`production-plan` gains Workers Routes Read.**
 - **`doctor` checks that the `production-plan` token lists rulesets in every phase.** If one permission doesn't cover a phase, the token gains that phase's read permission. If no read permission covers it, `infra/zone` declares that phase's ruleset empty.
 
@@ -46,6 +48,7 @@ Decided in [Settle the audit's detection and credential gaps](https://github.com
 ### Email Routing leaves the pipeline
 
 - **Email Routing on the zone, the Operator's destination address and the `abuse@` rule move to a hand-applied OpenTofu configuration in `infra/bootstrap`,** applied with the broad token, as ADR 0024 did for the backup bucket.
+  - It also holds the zone's mail records: MX, SPF, DKIM and DMARC. The DMARC policy is applied after bootstrap confirms the alert mail passes ([ADR 0013](./0013-a-deployment-is-given-its-domain-and-owns-a-dedicated-zone.md)).
   - It is its own configuration with its own key in the prod state bucket, encrypted with the prod passphrase. Applying it never plans the bucket's configuration.
   - Only prod's zone gets it. Alerts and `abuse@` are prod only, so a preview zone after the account split has no Email Routing.
 - **The `production` token drops both Email Routing permissions,** the zone's rules and the account's destination addresses. No credential in GitHub can then change where mail to the Short domain goes.
@@ -100,4 +103,4 @@ No slice moves between milestones.
 - **Changing the alert address or the `abuse@` rule is now a hand apply,** not a merge.
 - **A break-glass route or ruleset added by hand fails the hourly job** until it is declared or removed. That is intended, as it is for a break-glass deploy (ADR 0026).
 - **The off-account alert now depends on Grafana,** not on the Status Worker. With `probes_enabled` off there is none, as before.
-- **Whether `production` holds a DNS permission is not stated by ADR 0007's table.** The listing rule above covers either answer.
+- **`production` holds no DNS permission,** which ADR 0007's table now states. This ADR first left that open and wrote the listing rule to cover either answer.

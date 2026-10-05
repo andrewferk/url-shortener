@@ -38,6 +38,8 @@ status: accepted
 
 > Amended by [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md): `infra/env` takes `spend_alert_dollars_per_day` (default 1), and each environment gets a second Analytics Engine dataset, `request_events_<env>`, bound to the `redirect` and `status` Workers.
 
+> Amended in place by [Which credential applies the DNS records in infra/zone?](https://github.com/andrewferk/url-shortener/issues/85): `infra/zone` holds no DNS records, and the `production` token holds no DNS permission. The DMARC record lives with Email Routing's records in the hand-applied configuration in `infra/bootstrap`. A record that belongs to no environment goes in `env/prod`.
+
 # Split the stack between OpenTofu and Wrangler, keep the Links in a separately deployed data Worker, and isolate previews by account
 
 Cloudflare has no lock, trash or restore for a deleted Worker, KV namespace, D1 database or Durable Object namespace. Deleting a Worker also deletes the Durable Object namespaces it implements, so under [ADR 0001](./0001-cloudflare-workers-typescript-durable-objects-kv.md)'s single Worker, one wrong delete loses every Link and tombstone. So the layout is designed around what each credential *can* destroy.
@@ -103,15 +105,16 @@ Moving the classes out of `redirect` changes no latency: a call to a Durable Obj
   - creating each Worker once (only product-level Admin can create a Worker);
   - the Grafana stack, with Synthetic Monitoring installed by a hand-applied OpenTofu configuration that lives here ([ADR 0021](./0021-three-probe-locations-every-two-minutes-and-alert-rules-we-own.md)), not switched on in the UI;
   - the Status Worker's two read tokens;
-  - prod's backup bucket (ADR 0024) and Email Routing ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)), each a hand-applied OpenTofu configuration that lives here.
+  - prod's backup bucket (ADR 0024) and Email Routing ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)), each a hand-applied OpenTofu configuration that lives here. The Email Routing configuration also holds the zone's mail records: MX, SPF, DKIM and DMARC.
 - **`infra/zone`:** one state per Cloudflare account, holding everything that exists once per zone or account:
-  - zone settings and all rulesets;
-  - DNS records that belong to no environment.
+  - zone settings and all rulesets.
+
+  It holds no DNS records. The unattended `production` token applies this root, and no DNS record is applied without an approval or by hand.
 
   A Free zone has one ruleset per phase and `cloudflare_ruleset` owns the whole rule list, so only this root touches rulesets. Every rule carries a `ref`: without one, the provider may delete and recreate a rule when the ruleset changes.
 - **`infra/env`:** one root, with one state per environment (`env/prod`, `env/pr-<n>`) selected by the backend key, not by workspaces. It holds everything that exists once per environment:
   - KV namespaces and the D1 database;
-  - the environment's DNS records. A record belongs to the environment whose hostname it is, so the apex, `api.` and `status.` belong to prod.
+  - the environment's DNS records. A record belongs to the environment whose hostname it is, so the apex, `api.` and `status.` belong to prod. A record that belongs to no environment, such as a domain-verification TXT record, also goes in `env/prod`, because prod owns the Short domain's names. The mail records are the exception: they live with Email Routing in `infra/bootstrap`.
   - the environment's rate limiter namespace IDs;
   - the Grafana checks when `probes_enabled`;
   - the outputs Wrangler's config is rendered from.
@@ -179,7 +182,7 @@ Each set of credentials is kept in a separate GitHub environment. Cloudflare API
 
 | GitHub environment | Runs | Cloudflare token can | Approval |
 |---|---|---|---|
-| `production` (from `main` only) | Deploys `redirect` and `status`, applies `infra/zone`, and creates the Canary link (OIDC `environment=production`) | Edit `redirect` and `status` only. Workers Routes, rulesets, zone settings, and Bot Management Write so it can turn Bot Fight Mode off. No Email Routing (ADR 0029). **No KV, D1 or Workers Admin**, so it can't delete a Worker or any data through the API. | None |
+| `production` (from `main` only) | Deploys `redirect` and `status`, applies `infra/zone`, and creates the Canary link (OIDC `environment=production`) | Edit `redirect` and `status` only. Workers Routes, rulesets, zone settings, and Bot Management Write so it can turn Bot Fight Mode off. No Email Routing (ADR 0029) and no DNS. **No KV, D1 or Workers Admin**, so it can't delete a Worker or any data through the API. | None |
 | `production-admin` (from `main` only) | Applies `env/prod`, deploys `links-data` and runs D1 schema migrations | Edit `links-data`. KV, D1, DNS; no R2 edit (ADR 0024). The Grafana Synthetic Monitoring token and stack token (ADRs 0016, 0021), and the Grafana write token that `links-data` holds for its heartbeat (ADR 0026). | The Operator approves each run |
 | `production-plan` (from `main` only; [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md)) | Plans `infra/zone` and `env/prod`, and runs the hourly integrity job (ADR 0026) | Read only: Metadata Read-Only on Workers, R2 read (ADR 0024) and Workers Routes Read (ADR 0029). | None |
 | `preview` | Applies `env/pr-<n>`, deploys and tears down previews | Workers Admin, KV, D1, DNS and Workers Routes in the account the previews live in. No rulesets or zone settings. | The Operator approves each run (single-account phase) |

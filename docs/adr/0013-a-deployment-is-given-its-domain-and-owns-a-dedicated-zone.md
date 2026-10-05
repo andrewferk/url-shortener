@@ -18,6 +18,8 @@ status: accepted
 
 > Amended by [ADR 0030](./0030-budget-an-ordinary-month-alert-on-request-floods-and-request-spend-and-make-every-outcome-eligible-unless-excluded.md): the renewal is budgeted against an ordinary month ($10 of Workers Paid after the account split), not a worst month.
 
+> Amended in place by [Which credential applies the DNS records in infra/zone?](https://github.com/andrewferk/url-shortener/issues/85): the DMARC record lives with the MX, SPF and DKIM records in the hand-applied Email Routing configuration in `infra/bootstrap`. `infra/zone` holds no DNS records.
+
 # A deployment is given its domain and owns a dedicated zone
 
 The project is headed for open source. It should run as its own service, be embeddable in another service, and not rule out a SaaS built on it. So no decision names a domain. [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) already takes the Short domain as an input (`base_domain`, `preview_base_domain`) and derives every hostname from it. This ADR states what a deployment requires of that domain, and what it does to the zone.
@@ -65,9 +67,9 @@ These are defaults in `infra/zone`. They cost nothing.
   - Always Use HTTPS;
   - an HSTS header on every response, `max-age` one year, with `includeSubDomains`.
   - `preload` is left to the operator. Getting off the preload list takes months, and some TLDs are already preloaded as a whole.
-- **Mail:** Email Routing is the zone's only mail, as ADR 0011 requires.
+- **Mail:** Email Routing is the zone's only mail, as ADR 0011 requires. This one default is not in `infra/zone`: it lives in the hand-applied Email Routing configuration in `infra/bootstrap` ([ADR 0029](./0029-list-rulesets-and-routes-hourly-move-the-off-account-heartbeat-to-grafana-and-take-email-routing-off-the-production-token.md)).
   - It owns the MX, SPF and DKIM records.
-  - DMARC is `p=reject`, so nobody else can send mail as the Short domain.
+  - DMARC is `p=reject`, so nobody else can send mail as the Short domain. The same configuration holds the DMARC record.
   - The Status Worker's alert mail is signed by Email Routing. Bootstrap confirms it passes DMARC before the policy is applied.
 
 ### Choosing a domain
