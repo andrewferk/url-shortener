@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended by [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md): if `audit-read` can't read Audit Logs v1 under any permission, the hourly integrity job lists Email Routing rules and addresses, and that listing reports an added one.
+
 # List rulesets and routes hourly, move the off-account heartbeat to Grafana, take Email Routing off the `production` token, and check the backup bucket's location hint
 
 The 2026-10-04 audit found four gaps in what detects a change made with a stolen or misused credential, and in what a credential can reach:
@@ -49,7 +51,7 @@ Decided in [Settle the audit's detection and credential gaps](https://github.com
 - **The `production` token drops both Email Routing permissions,** the zone's rules and the account's destination addresses. No credential in GitHub can then change where mail to the Short domain goes.
 - **`production-plan` keeps Email Routing read** and plans this configuration, in the pull request's `plan` job and in the hourly integrity job.
 - **`doctor` checks that `production` can still deploy `status` with its `send_email` binding.** If it can't, the token takes Email Routing Addresses Read and nothing more.
-- **The claim becomes:** no unattended credential can change Email Routing. The broad token and a dashboard session can add a rule that sends `abuse@` to a Worker or to any address verified on the account. The audit watch's Audit Logs v1 line ([ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md), ADR 0026) reports an added rule or address, and the hourly plan reports a changed one.
+- **The claim becomes:** no unattended credential can change Email Routing. The broad token and a dashboard session can add a rule that sends `abuse@` to a Worker or to any address verified on the account. The audit watch's Audit Logs v1 line ([ADR 0012](./0012-watch-audit-logs-from-the-status-worker.md), ADR 0026) reports an added rule or address, and the hourly plan reports a changed one. If no account-owned token can read Audit Logs v1, the hourly integrity job lists the zone's Email Routing rules and destination addresses and fails on one this configuration doesn't declare, so an added one is reported within the hour ([ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md)).
 - **Two spikes the research left are closed without running.** Whether the verification link works without a Cloudflare login, and whether a token can set an address's status to verified, no longer decide anything. Whether Audit Logs v2 records Email Routing changes is already one of ADR 0016's `doctor` checks.
 
 ### The backup bucket takes the location hint, and both plan jobs check it

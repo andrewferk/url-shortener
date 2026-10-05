@@ -4,6 +4,8 @@ status: accepted
 
 > Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): a Worker with `exports` keeps `--tag`; `links-data` is tagged with its bundle hash. What `exports` rules out is restated as documented and partly contradicted by Wrangler's source, to be settled by a spike.
 
+> Amended by [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md): R2 locking that fails under contention is removed, leaving the concurrency groups as the only guard. `reencrypt` runs the first of three commands that rewrites the state, the last being an apply that changes a rotation marker every root declares.
+
 # Declare the Durable Objects with `exports`, keep delivery's gates off run history, make the state passphrase random and enforced, show approvers values, and pin OpenTofu 1.13
 
 Six parts of [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) and [ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md) no longer match what Cloudflare, GitHub and OpenTofu document:
@@ -61,7 +63,7 @@ Decided in [How does delivery change: Durable Object `exports`, retention-proof 
 - The Operator re-encrypts the hand-applied states from their machine in the same way.
 - A preview bucket is rotated by tearing down every preview and swapping the secret.
 - If a secret had slipped into state, it is rolled as well; rotation alone doesn't un-leak it.
-- OpenTofu documents `fallback` only in general terms and doesn't say which command rewrites an unchanged state. An early spike settles the command before the runbook is written.
+- OpenTofu documents `fallback` only in general terms and doesn't say which command rewrites an unchanged state. An early spike settles the command before the runbook is written. It tries `tofu apply -refresh-only`, then `tofu state pull` and `tofu state push`, then an apply that raises the input of a `terraform_data` rotation marker, which every root declares from the start. The first that rewrites the state is what `reencrypt` runs; the last is a real change and always does ([ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md)).
 
 ### What an approver sees
 
@@ -81,6 +83,7 @@ Decided in [How does delivery change: Durable Object `exports`, retention-proof 
 - **If it fails, `production-plan` takes a read-write key on the state bucket.** That adds little: the unattended `production` environment already holds one on the same bucket, because it applies the zone. The plan job still never applies.
 - **`use_lockfile` stays,** behind the concurrency groups, which are the first guard. Only applying jobs take the lock, with `-lock-timeout=5m`.
 - **An orphaned lock is a runbook entry.** A plan on R2 has left its own lock behind before (opentofu#4405), and a read-only key can't clear one. The entry is `tofu force-unlock` from the Operator's machine. The spike also applies under contention.
+- **If two applies both get the lock, or a lock is left behind when nothing crashed, `use_lockfile` is removed** and every job runs `-lock=false` (ADR 0032). The concurrency groups are then the only guard in CI, and the runbook says the Operator never applies a state that CI also applies while a run is in progress.
 
 ## Cost
 
@@ -117,4 +120,4 @@ Decided in [How does delivery change: Durable Object `exports`, retention-proof 
 - **Amends ADRs 0021 and 0024:** their hand-applied states use a random passphrase and `enforced`.
 - **`links-data` can never use gradual deployments or `wrangler versions upload`.** A future wish to roll shard code out gradually would need a new Worker.
 - **Preview runs need `deployments: write`** on the ops repo's `GITHUB_TOKEN`, and the `find` job `deployments: read`.
-- **New spikes and `doctor` checks:** read-only planning; R2 locking under contention; which command re-encrypts an unchanged state; whether deployment records outlive retention; the refused delete of a bound Worker.
+- **New spikes and `doctor` checks:** read-only planning; R2 locking under contention; which command re-encrypts an unchanged state (both with outcomes in ADR 0032); whether deployment records outlive retention; the refused delete of a bound Worker.
