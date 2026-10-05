@@ -16,6 +16,8 @@ status: accepted
 
 > Amended by [ADR 0031](./0031-touch-shards-through-a-workflow-tag-links-data-with-its-bundle-hash-and-state-the-case-insensitive-limit.md): the shard touch is a gated method, called by the `touch-shards` Workflow. The `production-admin` token starts that Workflow; if Editor on `links-data` can't, it gains the narrowest Workflows permission that can.
 
+> Amended in place by [Which credential applies the DNS records in infra/zone?](https://github.com/andrewferk/url-shortener/issues/85): only `production-admin` and `preview` can add or re-point a DNS record from CI, both behind an approval. The unattended `production` token holds no DNS permission.
+
 # State what each credential can do to Link data, gate Operator methods with a secret, move `AUTH` writes into `links-data`, and take the backup locks out of CI's reach
 
 [ADR 0007](./0007-opentofu-wrangler-split-links-data-worker-account-isolation.md) says "nothing that runs unattended in prod can delete anything". It reasons about API-token permissions, and it is false for data. A token that can deploy a Worker controls everything that Worker can bind, and three Cloudflare facts mean a binding can't be fenced:
@@ -46,6 +48,7 @@ Decided in [What can each credential and Worker binding do to Link data?](https:
 
 - **Recovery depends on someone noticing within the window.** Noticing belongs to [How is a silent Redirect hijack detected?](https://github.com/andrewferk/url-shortener/issues/56).
 - **The `production` token's real gate is the ops repo's `main`.** Hardening it belongs to [How does a deployment survive losing its Cloudflare account, its domain or an identity root?](https://github.com/andrewferk/url-shortener/issues/57).
+- **No unattended credential can add or re-point a DNS record on the Short domain.** `production` holds no DNS permission (ADR 0007). From CI, only `production-admin` and, until the account split, `preview` can, and each run of either is approved.
 - **Non-enumerability holds against Visitors and Creators only.** [ADR 0002](./0002-random-short-codes-claimed-by-conditional-insert.md)'s property, as [ADR 0022](./0022-alert-on-redirect-floods-reset-the-brake-hourly-and-accept-short-code-guessing.md) restated it, never bound deployment credentials: `production` and `production-plan` can list every Short code, Target URL and Creator ID in `LINKS`.
 
 ### Operator methods are gated by a secret
