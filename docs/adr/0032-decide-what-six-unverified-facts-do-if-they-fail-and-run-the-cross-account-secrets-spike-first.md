@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> Amended in place by [Spike: do environment secrets resolve across accounts inside a reusable workflow?](https://github.com/andrewferk/url-shortener/issues/91): the spike ran on 2026-10-05. Both rungs of the ladder failed. A third shape, not on the ladder, works and is the design: every reusable workflow declares the fixed names, required unless the contract marks one optional, and each ops repo's caller passes them by name. Reusable workflows stay, and the composite-action fallback is not taken.
+
 # Decide what six unverified facts do if they fail, and run the cross-account secrets spike before any workflow is written
 
 The PRD says every spike has its outcome decided in advance in the ADR named. The 2026-10-04 audit found six facts for which that was untrue. Each finding was checked against the ADR text:
@@ -21,7 +23,26 @@ Decided in [Give the six spikes without a fallback a decided outcome](https://gi
 
 ## Decision
 
-### Cross-account environment secrets: a ladder that ends in composite actions
+### Cross-account environment secrets: the ladder failed, a third rung works, and reusable workflows stay
+
+**What the spike found** (2026-10-05, [the write-up](https://github.com/andrewferk/url-shortener/issues/91#issuecomment-6004478902)):
+
+- **Both rungs below failed.** The called job's secret was empty with bare names ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37379086579)) and with the name declared as optional ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37379179132)). A control, an ordinary job of the caller's own in the same environment, read it ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37379025164)). Each job compared a hash of the secret, so a pass means the value arrived.
+- **A third rung, which the ladder didn't name, works** ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37380423993)), **and it is the design:**
+  - the reusable workflow declares each fixed name under `on.workflow_call.secrets`, as in the second rung;
+  - the caller passes each by name on its `uses:` line: `NAME: ${{ secrets.NAME }}`. In the caller that names a repo-level secret, which doesn't exist, so it passes nothing of value;
+  - a called job that names an `environment` then reads that environment's secret under the name. GitHub's reusable-workflow docs say as much: the environment's secret is used, not the one passed.
+- **The names are declared `required: true`,** except any the contract marks optional (`STATE_PASSPHRASE_PREVIOUS`). The third rung ran with the name optional. A fourth run declared it required and passed too ([run](https://github.com/dad-incognito/xacct-secrets-spike-ops/actions/runs/37382817625)): GitHub's required check accepts a name the caller passes with an empty value. GitHub documents that it refuses to start a run whose caller leaves a required secret out; the spike didn't run that case.
+- **It is taken over composite actions** because an ops repo still pins one thing and holds no job graph. Everything in ADR 0016 stands except how the names reach the job.
+- **What it changes:**
+  - every reusable workflow declares the fixed names it reads, required unless the contract marks one optional;
+  - every caller in `examples/ops-repo/` carries the same fixed `secrets:` map, and each ops repo copies it;
+  - a release that adds a secret name changes the callers too, and says so under **Upgrading**. A caller whose map leaves out a required name doesn't start. A secret missing from the environment still arrives empty, so a job fails on an empty secret it requires and names it.
+- **The ops repo holds no repo-level secret under a fixed name.** That was the spike's condition, and it keeps an environment the only source of each value.
+- **What the spike didn't test:** it ran one job in one environment. That each job of a workflow which crosses environments reads its own environment's value is expected from the same mechanism, and the first such workflow shows it.
+- **The composite-action shape below is not built.** It stays as the recorded alternative if GitHub changes this behaviour.
+
+**The ladder as it was decided in advance:**
 
 - **The spike tries two rungs inside reusable workflows,** with two throwaway public repos under two personal accounts (ADR 0016):
   1. a job that names an `environment` reads that environment's secrets by bare name, as ADR 0016 designs;
@@ -91,6 +112,8 @@ Decided in [Give the six spikes without a fallback a decided outcome](https://gi
 ## Considered options
 
 - **Composite actions on any failure,** skipping the second rung. The second rung costs one more spike run and keeps ADR 0016 whole.
+- **Composite actions once both rungs had failed,** as the ladder said. One more run found a shape that keeps reusable workflows for the price of a fixed `secrets:` map in each caller.
+- **Declaring every name optional,** as the third rung ran. A caller that left a name out would then start, and fail only when a job read the empty secret.
 - **Leaving the cross-account spike in slice 1.6.** It would run after slice 1.5 had built `deploy.yml` on the assumption.
 - **Keeping `use_lockfile` whatever the spike finds.** A lock that doesn't exclude is worse than none, because it reads as a guard.
 - **Rotating the passphrase only when an apply happens to be pending.** A rotation is by event (ADR 0027) and can't wait for one.
@@ -107,5 +130,5 @@ Decided in [Give the six spikes without a fallback a decided outcome](https://gi
 - **Amends ADR 0025:** the retention fallback, `doctor`'s probe in either mode, and the `offsite_backup` field.
 - **Amends ADR 0012 and ADR 0029:** what the watch and the Email Routing claim become if v1 can't be read.
 - **The PRD:** slice 1.4 starts with the cross-account spike; slice 1.6 gains the `--secrets-file` spike and every fallback; the `doctor` table's three rows name theirs; the citation of ADR 0015 is corrected to ADR 0016.
-- **If the composite-action fallback is taken, ADR 0015's "pins this repo's reusable workflows" becomes "copies this repo's workflow template and pins its actions",** and that ADR is amended when the spike reports.
+- **The composite-action fallback is not taken, so ADR 0015's "pins this repo's reusable workflows" stands.** Its bullet on passing secrets, and ADR 0016's secret contract, say what the spike found.
 - **No glossary term changes.**

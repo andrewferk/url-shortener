@@ -8,6 +8,8 @@ status: accepted
 
 > Amended in place by [Amend the PRD and ADRs with the re-chart's decisions and the no-decision amendments](https://github.com/andrewferk/url-shortener/issues/60): the test package is `@cloudflare/vitest-plugin`, and `createTestHarness()` replaces `unstable_startWorker()`. Immutable releases are enabled, and tag pins are cited as a deliberate deviation from GitHub's SHA-pin advice. Private vulnerability reporting is switched on. The alert address is an alias.
 
+> Amended in place by [Spike: do environment secrets resolve across accounts inside a reusable workflow?](https://github.com/andrewferk/url-shortener/issues/91): an ops repo's callers pass the fixed secret names by name, which is what lets a job in a reusable workflow read its environment's secrets across accounts.
+
 # License under Apache-2.0, keep this repo free of credentials, and run every deployment from its own public ops repo
 
 The project is headed for open source, and this repo is already public, with no licence. It should be embeddable, and must not foreclose a SaaS built on it. [ADR 0013](./0013-a-deployment-is-given-its-domain-and-owns-a-dedicated-zone.md) makes every deployment value an input, and the author's instance a deployment like any other Operator's.
@@ -96,5 +98,5 @@ $0. Public repos get GitHub Actions minutes, environments and required reviewers
 - **Amends ADR 0007:** the GitHub environments, their secrets and their approvals live in the ops repo. The render script and `infra/` roots run from this repo's code, at the ops repo's pinned ref.
 - **Amends ADR 0013:** its ban on committed deployment values covers this repo. An ops repo commits its own non-secret config.
 - **The author's own pull requests don't preview on push.** Each preview is a dispatch. The delivery pipeline may add a poll in the ops repo for pull requests by an allowlisted author, without changing the rule that previews start there.
-- **Another Operator's ops repo passes secrets to the reusable workflows explicitly.** `secrets: inherit` works only within one organisation or enterprise, and environment secrets aren't passed across `workflow_call` at all: a job in the reusable workflow that names an `environment` uses that environment's secrets. The delivery pipeline confirms how this resolves for a caller in another account.
+- **Another Operator's ops repo passes secrets to the reusable workflows explicitly.** `secrets: inherit` works only within one organisation or enterprise. A job in the reusable workflow that names an `environment` uses that environment's secrets, but for a caller in another account only under names the workflow declares and the caller passes by name. The example callers carry that fixed `secrets:` map ([ADR 0016](./0016-deliver-from-ops-repo-reusable-workflows-plan-read-only-apply-behind-one-approval.md), [ADR 0032](./0032-decide-what-six-unverified-facts-do-if-they-fail-and-run-the-cross-account-secrets-spike-first.md)).
 - **Relicensing later needs every contributor's consent,** because there is no CLA.
