@@ -329,6 +329,16 @@ cf() {
 }
 cf_error() { jq -r '[.errors[]? | "\(.code) \(.message)"] | join("; ")' "$CF_BODY" 2>/dev/null | cut -c1-300 | scrub; }
 
+# probe URL: one GET of a throwaway Worker. The body lands in $PROBE_BODY and
+# a copy in the probe log, the HTTP status in $PROBE_STATUS ("" if curl
+# itself failed, e.g. DNS). Returns curl's status.
+PROBE_BODY="$WORK/probe-body"; PROBE_STATUS=""
+probe() {
+  PROBE_STATUS=$(curl -sS -o "$PROBE_BODY" -w '%{http_code}' --max-time 60 "$1" 2>"$LOGS/ld-probe.log") || PROBE_STATUS=""
+  { printf '%s HTTP %s\n' "$(date '+%H:%M:%S')" "${PROBE_STATUS:-none}"; cat "$PROBE_BODY" 2>/dev/null; printf '\n'; } >>"$LOGS/ld-probe.log"
+  [[ -n "$PROBE_STATUS" ]]
+}
+
 # token_ok TOKEN: is this an active token on the account? Account-owned and
 # user-owned tokens verify at different paths.
 token_ok() {
@@ -1039,21 +1049,39 @@ spike_do() {
   write_env LD_URL "$url"
   record WORKERS_SUBDOMAIN "$(sed -E 's#https://[^.]+\.([^.]+)\.workers\.dev.*#\1#' <<<"$url")"
   record LD_DEPLOYED yes
-  for i in $(seq 1 24); do
-    if curl -sf "$url/?k=$SPIKE_KEY&hint=weur&name=ready-$RUN" >/dev/null 2>&1; then break; fi
+  # A fresh workers.dev subdomain can take minutes to resolve; wait for a 200.
+  say "Waiting for $url to answer (a new workers.dev subdomain can take a few minutes)..."
+  for i in $(seq 1 60); do
+    if probe "$url/?k=$SPIKE_KEY&hint=weur&name=ready-$RUN" && [[ "$PROBE_STATUS" == 200 || "$PROBE_STATUS" == 403 ]]; then break; fi
     sleep 5
   done
+  if [[ "$PROBE_STATUS" != 200 ]]; then
+    bad "still no 200 after five minutes: HTTP ${PROBE_STATUS:-none}; the reply is in $LOGS/ld-probe.log"
+    note "$(excerpt "$LOGS/ld-probe.log")"
+    note "Try it yourself: curl -i '$url/?k=<SPIKE_KEY from state.env>&hint=weur&name=x'"
+    note "A 403 means the key differs; an HTML error page means the Worker threw; nothing means DNS."
+    confirm "Carry on probing anyway?" || die "re-run the wizard once the URL answers; the deploy is kept."
+  fi
   say "Asking five new objects, each created with a different location hint, where they are."
   say "Each fetches cloudflare.com/cdn-cgi/trace from inside the object and reports its 'colo'."
   printf '\n'
   printf '  %s%-6s %-12s %-12s %-22s%s\n' "$BOLD" "hint" "object says" "trace loc" "Worker ran in" "$RESET"
   for hint in wnam enam weur apac oc; do
-    line=$(curl -s "$url/?k=$SPIKE_KEY&hint=$hint&name=direct-$hint-$RUN" || true)
-    if ! jq -e . >/dev/null 2>&1 <<<"$line"; then bad "$hint: no JSON came back"; table+="$hint→error "; continue; fi
+    line=""
+    for i in 1 2 3; do
+      if probe "$url/?k=$SPIKE_KEY&hint=$hint&name=direct-$hint-$RUN-$i" && jq -e . "$PROBE_BODY" >/dev/null 2>&1; then
+        line=$(cat "$PROBE_BODY"); break
+      fi
+      sleep 3
+    done
+    if [[ -z "$line" ]]; then
+      bad "$hint: no JSON came back (HTTP ${PROBE_STATUS:-none}; reply kept in $LOGS/ld-probe.log)"
+      table+="${hint}→error "; continue
+    fi
     worker_colo=$(jq -r '.worker_colo // "?"' <<<"$line")
     printf '  %-6s %-12s %-12s %-22s\n' "$hint" "$(jq -r '.trace_colo // .trace_error // "none"' <<<"$line")" \
       "$(jq -r '.trace_loc // "-"' <<<"$line")" "$worker_colo"
-    table+="$hint→$(jq -r '.trace_colo // "none"' <<<"$line") "
+    table+="${hint}→$(jq -r '.trace_colo // "none"' <<<"$line") "
     if [[ "$(jq -r '.trace_colo // ""' <<<"$line")" != "$worker_colo" ]]; then away=$((away + 1)); fi
     props=$(jq -r '"ctx: " + (.ctx_properties | join(",")) + "; ctx.id: " + (.id_properties | join(","))' <<<"$line")
   done
