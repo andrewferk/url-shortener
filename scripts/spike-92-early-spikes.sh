@@ -769,8 +769,15 @@ r2_setup() {
     confirm "Enter them again?" || return 0
   fi
   say "Three OpenTofu spikes share one throwaway R2 bucket, ${BOLD}$BUCKET${RESET}."
-  if loud "$LOGS/r2-create.log" wr "$CF_SETUP_TOKEN" "$WORK" r2 bucket create "$BUCKET"; then ok "bucket created"
-  else warn "the create failed; if the bucket already exists, carry on."; fi
+  cf "$CF_SETUP_TOKEN" GET "/accounts/$CF_ACCOUNT_ID/r2/buckets/$BUCKET"
+  if [[ "$CF_STATUS" == 200 ]]; then ok "the bucket already exists"
+  elif loud "$LOGS/r2-create.log" wr "$CF_SETUP_TOKEN" "$WORK" r2 bucket create "$BUCKET"; then ok "bucket created"
+  else
+    warn "the create failed (log: $LOGS/r2-create.log)."
+    note "R2 needs its billing enabled first: R2 Object Storage → Overview → Purchase R2 (there is a free tier)."
+    note "If that was it, enable it and re-run the wizard; this stage retries the create."
+    die "no bucket named $BUCKET, so its keys can't be made yet."
+  fi
   say "Now two S3 keys for it. Only you can make these."
   open_url "https://dash.cloudflare.com/$CF_ACCOUNT_ID/r2/overview"
   step "On the R2 page, under ${BOLD}Account Details${RESET}, click ${BOLD}Manage${RESET} next to API Tokens."
