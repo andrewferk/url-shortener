@@ -10,6 +10,7 @@
   "include": [
     "*.ts",
     "*.js",
+    ".dependency-cruiser.js",
     "tools",
     "packages/*/vitest.config.ts",
     "workers/*/vitest.config.ts"

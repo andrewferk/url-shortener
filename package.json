@@ -15,7 +15,8 @@
     "workers/*"
   ],
   "scripts": {
-    "lint": "eslint . && npm run lint:workflows && npm run lint:versions",
+    "lint": "eslint . && npm run lint:cycles && npm run lint:workflows && npm run lint:versions",
+    "lint:cycles": "depcruise packages workers tools",
     "lint:workflows": "node tools/workflows/cli.ts",
     "lint:versions": "node tools/versions/cli.ts",
     "typecheck": "node tools/typecheck.ts",
@@ -30,6 +31,7 @@
     "@types/node": "24.19.1",
     "@typescript-eslint/rule-tester": "8.71.1",
     "@typescript-eslint/utils": "8.71.1",
+    "dependency-cruiser": "18.5.0",
     "eslint": "10.12.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.1",
