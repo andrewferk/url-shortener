@@ -69,7 +69,9 @@ export type DeletedBy = "creator" | "operator";
 /**
  * The `v:1` JSON stored in `LINKS`. Key order is part of the format:
  * live `{"v":1,"t":…,"e":…,"c":…,"ts":…}`, with `e` left out when there is no
- * Expiry, and tombstone `{"v":1,"d":1,"c":…,"ts":…,"dt":…,"by":…}`.
+ * Expiry, and tombstone `{"v":1,"d":1,"c":…,"ts":…,"dt":…,"by":…}`. Strings
+ * are escaped as `JSON.stringify` does: `"`, `\` and control characters only,
+ * with `/` and non-ASCII characters written as UTF-8.
  */
 export function encodeLinksValue(value: LinksValue): string {
   if (value.state === "deleted") {

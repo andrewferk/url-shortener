@@ -33,7 +33,7 @@ export async function decideRedirect(request: RedirectRequest, ports: RedirectPo
   if (namespace === null) return { status: 404, reason: "malformed" };
   const value = await ports.links.read({ namespace, shortCode });
   if (value === null) return { status: 404, reason: "not-found" };
-  const state = linkState(value, ports.clock.now());
-  if (state === "live" && value.state === "live") return { status: 302, location: value.targetUrl };
-  return { status: 410, reason: state === "expired" ? "expired" : "deleted" };
+  if (value.state === "deleted") return { status: 410, reason: "deleted" };
+  if (linkState(value, ports.clock.now()) === "expired") return { status: 410, reason: "expired" };
+  return { status: 302, location: value.targetUrl };
 }

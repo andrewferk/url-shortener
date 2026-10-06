@@ -94,6 +94,12 @@ describe("LINKS values", () => {
       '{"v":1,"t":"https://example.com/","c":"cr_4fK9pQ2xZ7","ts":1791244800000}',
     ],
     [
+      // Only `"` and `\` are escaped; `/` and non-ASCII characters are written as UTF-8.
+      "a live Link whose Target URL needs escaping",
+      { state: "live", targetUrl: 'web+demo:say "hi"\\there/café/日本', creatorId: "cr_4fK9pQ2xZ7", createdAt: 1791244800000 },
+      String.raw`{"v":1,"t":"web+demo:say \"hi\"\\there/café/日本","c":"cr_4fK9pQ2xZ7","ts":1791244800000}`,
+    ],
+    [
       "a Link its Creator deleted",
       {
         state: "deleted",

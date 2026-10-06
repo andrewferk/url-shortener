@@ -76,6 +76,43 @@ export function toLinksValue(link: Link): LinksValue {
   };
 }
 
+/** A void record's line: the Link, and the `deleted_at` of the one delete it voids (ADR 0028). */
+export interface VoidRecord extends LinkId {
+  readonly deletedAt: number;
+}
+
+/**
+ * Merges every record the change log holds for one Link: the deleted one
+ * wins, unless that delete is voided, in which case it counts as absent
+ * (ADRs 0008, 0019, 0028). A Link's fields never change, so the merge needs no
+ * ordering. `null` when nothing is left, every record being a voided delete.
+ */
+export function mergeLinkRecords(records: readonly Link[], voids: readonly VoidRecord[]): Link | null {
+  const [first] = records;
+  if (first === undefined) return null;
+  if (records.some((record) => record.namespace !== first.namespace || record.shortCode !== first.shortCode)) {
+    throw new Error("mergeLinkRecords takes the records of one Link");
+  }
+  const voided = new Set(
+    voids
+      .filter((record) => record.namespace === first.namespace && record.shortCode === first.shortCode)
+      .map((record) => record.deletedAt),
+  );
+  let merged: Link | null = null;
+  for (const record of records) {
+    if (record.deletion !== undefined && voided.has(record.deletion.at)) continue;
+    if (merged === null || outranks(record, merged)) merged = record;
+  }
+  return merged;
+}
+
+// A delete outranks a live record; of two deletes, the later wins, so the
+// result doesn't depend on the order records arrive in.
+function outranks(record: Link, current: Link): boolean {
+  if (record.deletion === undefined) return false;
+  return current.deletion === undefined || record.deletion.at > current.deletion.at;
+}
+
 /** Who deletes: a Creator, only its own Links, or the Operator, any Link (ADR 0005). */
 export type Deleter = { readonly kind: "creator"; readonly creatorId: CreatorId } | { readonly kind: "operator" };
 

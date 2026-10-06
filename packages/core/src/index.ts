@@ -34,8 +34,10 @@ export {
   type LinkId,
   linkState,
   type LinkState,
+  mergeLinkRecords,
   type NamespaceId,
   toLinksValue,
+  type VoidRecord,
 } from "./link.ts";
 export type {
   AuthenticatedCreator,

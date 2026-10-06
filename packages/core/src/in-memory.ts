@@ -25,26 +25,27 @@ export class InMemoryLinkStore implements LinkRegistry, LinkReader {
   readonly #links = new Map<string, Link>();
 
   claim(link: Link): Promise<ClaimResult> {
-    const existing = this.#links.get(keyOf(link));
+    const existing = this.#links.get(storeKey(link));
     if (existing !== undefined) return Promise.resolve({ claimed: false, existing });
-    this.#links.set(keyOf(link), link);
+    this.#links.set(storeKey(link), link);
     return Promise.resolve({ claimed: true });
   }
 
   async delete(id: LinkId, deleter: Deleter, at: number): Promise<DeleteResult> {
-    const result = await applyDelete(this.#links.get(keyOf(id)) ?? null, deleter, at);
-    if (result.deleted) this.#links.set(keyOf(id), result.link);
+    const result = await applyDelete(this.#links.get(storeKey(id)) ?? null, deleter, at);
+    if (result.deleted) this.#links.set(storeKey(id), result.link);
     return result;
   }
 
   read(id: LinkId): Promise<LinksValue | null> {
-    const link = this.#links.get(keyOf(id));
+    const link = this.#links.get(storeKey(id));
     return Promise.resolve(link === undefined ? null : toLinksValue(link));
   }
 }
 
-// Neither a Namespace ID nor a Short code contains `:` (ADR 0014).
-function keyOf(id: LinkId): string {
+// The store's own map key, not a `LINKS` key. Neither a Namespace ID nor a
+// Short code contains `:` (ADR 0014), so it is unambiguous.
+function storeKey(id: LinkId): string {
   return `${id.namespace}:${id.shortCode}`;
 }
 
