@@ -1456,8 +1456,10 @@ spike_dbot_setup() {
   record DBOT_SETUP yes
   say "Committing dependabot.yml normally starts a first update job within minutes. If none shows:"
   open_url "https://github.com/$DBOT_CONSUMER/network/updates"
-  step "That page is Insights → Dependency graph → Dependabot. Next to .github/workflows,"
-  step "open ${BOLD}Recent update jobs${RESET} and click ${BOLD}Check for updates${RESET}."
+  step "That page is Insights → Dependency graph → Dependabot. If it offers ${BOLD}Enable Dependabot${RESET},"
+  step "click it (if that opens an editor for a new dependabot.yml, close it and reload: the file"
+  step "is already committed). Then, next to .github/workflows, open ${BOLD}Recent update jobs${RESET}"
+  step "and click ${BOLD}Check for updates${RESET}."
   note "Stage 16 reads the result once a job has finished."
 }
 spike_dbot_setup
