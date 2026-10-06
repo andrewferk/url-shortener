@@ -70,6 +70,15 @@ describe("checkVersions", () => {
       ]);
     });
 
+    it("fails every copy left behind when only .tool-versions moves", () => {
+      expect(messages(repo({ ".tool-versions": "nodejs 24.22.0\nopentofu 1.14.0\n" }))).toEqual([
+        expect.stringMatching(/^\.nvmrc: .*24\.21\.0.*24\.22\.0/) as unknown,
+        expect.stringMatching(/^package\.json: .*devEngines\.runtime.*24\.21\.0.*24\.22\.0/) as unknown,
+        expect.stringMatching(/^\.github\/workflows\/ci\.yml: .*1\.13\.1.*1\.14\.0/) as unknown,
+        expect.stringMatching(/^infra\/zone\/versions\.tf: .*~> 1\.13\.0.*1\.14\.0/) as unknown,
+      ]);
+    });
+
     it("ignores comments and blank lines", () => {
       expect(checkVersions(repo({ ".tool-versions": "# Tools\n\nnodejs 24.21.0 # LTS\nopentofu 1.13.1\n" }))).toEqual([]);
     });
