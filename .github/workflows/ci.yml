@@ -73,7 +73,7 @@ jobs:
         with:
           tofu_version: 1.13.1
           tofu_wrapper: false
-      - run: scripts/tofu-validate.sh
+      - run: tools/tofu-validate.sh
 
   ci:
     name: CI
