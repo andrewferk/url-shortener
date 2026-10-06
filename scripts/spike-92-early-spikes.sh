@@ -299,13 +299,13 @@ excerpt() {
   printf '%s' "$out"
 }
 
-days_ago() {
-  if date -u -v-1d +%s >/dev/null 2>&1; then date -u -v-"$1"d +%Y-%m-%dT%H:%M:%SZ
-  else date -u -d "$1 days ago" +%Y-%m-%dT%H:%M:%SZ; fi
-}
 day_offset() { # day_offset -1 | +1 → YYYY-MM-DD
   if date -u -v-1d +%s >/dev/null 2>&1; then date -u -v"$1"d +%Y-%m-%d
   else date -u -d "$1 day" +%Y-%m-%d; fi
+}
+iso_to_epoch() { # iso_to_epoch YYYY-MM-DDTHH:MMZ → seconds
+  if date -u -v-1d +%s >/dev/null 2>&1; then date -j -u -f '%Y-%m-%dT%H:%MZ' "$1" +%s
+  else date -u -d "$1" +%s; fi
 }
 
 # ── Cloudflare ────────────────────────────────────────────────────────────
@@ -604,16 +604,12 @@ fi
 # on the default branch through the API and print the commit's SHA. A date
 # backdates the commit, which Dependabot's cooldown looks at.
 commit_file() {
-  local repo="$1" path="$2" content="$3" when="${4:-}" sha="" out args
+  local repo="$1" path="$2" content="$3" sha="" out args
   if out=$(gh api "repos/$repo/contents/$path" --jq .sha 2>/dev/null); then sha="$out"; fi
   args=(-X PUT "repos/$repo/contents/$path"
         -f "message=Spike #$ISSUE_NUMBER: $path"
         -f "content=$(printf '%s\n' "$content" | base64 | tr -d '\n')")
   if [[ -n "$sha" ]]; then args+=(-f "sha=$sha"); fi
-  if [[ -n "$when" ]]; then
-    args+=(-f "committer[name]=spike" -f "committer[email]=spike@example.invalid" -f "committer[date]=$when"
-           -f "author[name]=spike" -f "author[email]=spike@example.invalid" -f "author[date]=$when")
-  fi
   gh api "${args[@]}" --jq .commit.sha || die "couldn't write $path to $repo."
 }
 
@@ -1423,8 +1419,9 @@ spike_dbot_setup() {
   step "$PREFIX-dbot-src-tagbehind  v1.0.0 on C1; the pin is C2, ahead of the tag"
   step "$PREFIX-dbot-src-tagged     v1.0.0 on C2; the pin is C2, the tagged commit; main is ahead"
   step "$DBOT_CONSUMER_NAME      pins all three by SHA, with a daily github-actions dependabot.yml"
-  note "Commits and tags are backdated a month: Dependabot's default 3-day cooldown would"
-  note "otherwise hide every bump from a repo made today."
+  note "Dependabot's default 3-day cooldown hides any bump of a commit younger than 3 days, so"
+  note "stage 16 can't read a result before $(day_offset +4). (A backdated committer date doesn't"
+  note "help: the contents API ignores it.)"
   confirm "Create the four repos (as $GH_LOGIN)?" || return 0
   ensure_workflow_scope
   for c in $DBOT_CASES; do
@@ -1436,9 +1433,9 @@ spike_dbot_setup() {
   for c in $DBOT_CASES; do
     repo="$GH_LOGIN/$PREFIX-dbot-src-$c"
     ensure_repo "$repo" "Throwaway: $ISSUE_REPO#$ISSUE_NUMBER Dependabot SHA pin spike (source: $c)"
-    c1=$(commit_file "$repo" ".github/workflows/noop.yml" "$(dbot_source_workflow 1)" "$(days_ago 30)")
-    c2=$(commit_file "$repo" ".github/workflows/noop.yml" "$(dbot_source_workflow 2)" "$(days_ago 20)")
-    c3=$(commit_file "$repo" ".github/workflows/noop.yml" "$(dbot_source_workflow 3)" "$(days_ago 10)")
+    c1=$(commit_file "$repo" ".github/workflows/noop.yml" "$(dbot_source_workflow 1)")
+    c2=$(commit_file "$repo" ".github/workflows/noop.yml" "$(dbot_source_workflow 2)")
+    c3=$(commit_file "$repo" ".github/workflows/noop.yml" "$(dbot_source_workflow 3)")
     case "$c" in
       notag)     pin="$c1" ;;
       tagbehind) pin="$c2"; gh api -X POST "repos/$repo/git/refs" -f ref=refs/tags/v1.0.0 -f "sha=$c1" >/dev/null || die "couldn't tag $repo." ;;
@@ -1460,7 +1457,7 @@ spike_dbot_setup() {
   step "click it (if that opens an editor for a new dependabot.yml, close it and reload: the file"
   step "is already committed). Then, next to .github/workflows, open ${BOLD}Recent update jobs${RESET}"
   step "and click ${BOLD}Check for updates${RESET}."
-  note "Stage 16 reads the result once a job has finished."
+  note "Stage 16 reads the result once a job run on or after $(day_offset +4) has finished."
 }
 spike_dbot_setup
 pause
@@ -1531,6 +1528,14 @@ spike_dbot_read() {
   need DBOT_SETUP "Stage 14 hasn't created the repos yet; re-run the wizard to do it." || return 0
   begin R_DBOT || return 0
   local prs n diff c pin head out new summary="" stalled=no notag_out="" tagged_out="" behind_out=""
+  local at age
+  at=$(get DBOT_AT); age=$(( ($(date -u +%s) - $(iso_to_epoch "$at")) / 3600 ))
+  if (( age < 72 )); then
+    warn "The repos were made $age hours ago. Dependabot's default 3-day cooldown leaves a commit younger"
+    warn "than 72 hours alone ('Proposed commit SHA is in cooldown' in the job log), so a job run"
+    warn "now says nothing about the pins. Come back on or after $(day_offset +4)."
+    confirm "Read a result anyway?" || return 0
+  fi
   open_url "https://github.com/$DBOT_CONSUMER/network/updates"
   step "Open ${BOLD}Recent update jobs${RESET} next to .github/workflows. If there is no finished job,"
   step "click ${BOLD}Check for updates${RESET} and wait for it."
@@ -1555,9 +1560,10 @@ spike_dbot_read() {
       tagged)    tagged_out="$out"; say "Pin on the tagged commit, main ahead:      ${BOLD}$out${RESET}" ;;
     esac
   done
-  step "In the job's log ('view logs'), look for why a pin was left alone, e.g. a cooldown line."
+  step "In the job's log ('view logs'), search for 'dbot-src': for each repo note the 'Available"
+  step "release version/ref', 'Latest version is' and any 'cooldown' line."
   ask DBOT_NOTE "Note from the job log (optional):"
-  summary="Reusable-workflow pins, three source repos with C1→C2→C3 on main (backdated 30, 20, 10 days), read $(date -u +%Y-%m-%d). No version tag, pin C1: $notag_out. v1.0.0 on C1, pin C2: $behind_out. v1.0.0 on C2, pin C2 (main ahead): $tagged_out. ${DBOT_NOTE:+Job log: $DBOT_NOTE} Repos: https://github.com/$DBOT_CONSUMER"
+  summary="Reusable-workflow pins, three source repos with C1→C2→C3 on main (committed $at, $age h before reading; default 3-day cooldown), read $(date -u +%Y-%m-%d). No version tag, pin C1: $notag_out. v1.0.0 on C1, pin C2: $behind_out. v1.0.0 on C2, pin C2 (main ahead): $tagged_out. ${DBOT_NOTE:+Job log: $DBOT_NOTE} Repos: https://github.com/$DBOT_CONSUMER"
   if [[ "$notag_out" != *"main's HEAD"* || "$behind_out" != *"main's HEAD"* || "$tagged_out" != *"main's HEAD"* ]]; then stalled=yes; fi
   if [[ "$stalled" == yes ]]; then
     conclude DBOT yes "The reference ops repo's daily main bump can't rely on Dependabot in every case; Renovate is ADR 0016's recorded alternative (slice 1.5, M7)." "Dependabot doesn't follow main in every case. $summary"
