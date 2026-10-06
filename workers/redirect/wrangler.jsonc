@@ -1,0 +1,10 @@
+// The Redirect Worker's local configuration, used by its integration tests.
+// A deployment's configuration is rendered from OpenTofu outputs (ADR 0007),
+// so this file holds no deployment value: no account, route or domain.
+{
+  "name": "redirect",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false
+}
