@@ -3,16 +3,21 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
-  "engines": {
-    "node": ">=24"
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.21.0",
+      "onFail": "warn"
+    }
   },
   "workspaces": [
     "packages/*",
     "workers/*"
   ],
   "scripts": {
-    "lint": "eslint . && npm run lint:workflows",
+    "lint": "eslint . && npm run lint:workflows && npm run lint:versions",
     "lint:workflows": "node tools/workflows/cli.ts",
+    "lint:versions": "node tools/versions/cli.ts",
     "typecheck": "node tools/typecheck.ts",
     "test": "vitest run",
     "test:unit": "vitest run --project core --project tools",

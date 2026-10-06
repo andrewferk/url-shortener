@@ -11,7 +11,7 @@ Thanks for helping. This file covers getting set up, the rules CI holds every ch
 
 ## Setting up
 
-You need Node.js 24 (see [`.nvmrc`](./.nvmrc)) and npm. To validate the OpenTofu roots, you also need [OpenTofu](https://opentofu.org/) 1.13.
+You need the Node.js version in [`.tool-versions`](./.tool-versions), and npm. To validate the OpenTofu roots, you also need the [OpenTofu](https://opentofu.org/) version there. mise and asdf read `.tool-versions`, nvm and fnm read the same Node version from `.nvmrc`, and npm warns when the running Node differs from `devEngines` in `package.json`.
 
 ```sh
 npm ci
@@ -22,7 +22,7 @@ None of it needs a Cloudflare account or any credential. The Workers' integratio
 
 | Command                    | What it runs                                                       |
 | -------------------------- | ------------------------------------------------------------------ |
-| `npm run lint`             | ESLint, then the workflow lint                                     |
+| `npm run lint`             | ESLint, the workflow lint, then the tool-version check             |
 | `npm run typecheck`        | `tsc` for every `tsconfig.json` in the repo                        |
 | `npm run test:unit`        | The domain core's and the tooling's tests, under plain Node        |
 | `npm run test:integration` | The Workers' tests in local `workerd`, via `@cloudflare/vitest-plugin` |
@@ -64,6 +64,15 @@ Every action and reusable workflow from another repository is pinned by a full c
 Dependabot opens the pull requests that move these pins. `npm run lint:workflows` checks both rules.
 
 The one exception is an example ops-repo caller under `examples/`: it may call a reusable workflow by release tag, such as `@v0.1.0`, because Operators pin this repo's releases by tag ([ADR 0015](./docs/adr/0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md)). Its actions are still pinned by SHA.
+
+### Tool versions agree
+
+`.tool-versions` pins the exact Node.js and OpenTofu versions. Every other copy must agree with it:
+
+- Node: `.nvmrc`, `devEngines.runtime` in `package.json`, and every `actions/setup-node` step. A setup-node step reads one of those files with `node-version-file`, or names the same version. `@types/node` stays on the same major version.
+- OpenTofu: every `setup-opentofu` step's `tofu_version`, and every `required_version` in `infra/`, which must allow the pinned version.
+
+To move a version, change every copy in one pull request. `npm run lint:versions` names any copy you missed.
 
 ### No deployment values
 
