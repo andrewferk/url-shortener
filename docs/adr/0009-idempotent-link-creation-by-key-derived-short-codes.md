@@ -8,6 +8,8 @@ status: accepted
 
 > Amended by [ADR 0028](./0028-void-a-forged-or-mistaken-delete-and-never-lose-a-delete-in-a-restore.md): a keyed create whose own earlier attempt is now a Deleted link answers `201` with the Link as it is now, `state: deleted` and no `target_url`.
 
+> Amended in place by [1.2 The domain core](https://github.com/andrewferk/url-shortener/issues/94): the base62 digit order is stated (`0`–`9`, `A`–`Z`, `a`–`z`). The derivation depends on it, so it is as permanent as the derivation, and slice 1.2's test vectors pin it.
+
 # Make Link creation idempotent by deriving the Short code from the client's Idempotency-Key
 
 A retried `POST /v1/links` would draw a new random Short code ([ADR 0002](./0002-random-short-codes-claimed-by-conditional-insert.md)). The new code usually lands on a different shard, so a lost response turns into a second, orphaned Link. An idempotency record can't live in the shard that claims the Link, because the retry doesn't know which shard that is ([ADR 0008](./0008-link-data-model-shards-kv-creator-lists-backups.md)). The Creator's Durable Object is kept off the create path ([ADR 0004](./0004-abuse-protection-edge-ceiling-worker-limits-cost-brake.md)). So we don't store the key anywhere separate. When a request carries an `Idempotency-Key`, the Short code is **derived from the key** instead of drawn at random. A retry then recomputes the same code, reaches the same shard, and finds its own row. The existing atomic claim is the only coordination.
@@ -22,6 +24,7 @@ Decided in [What does the Link API on api. look like?](https://github.com/andrew
 - **Candidate *n*** (0, 1, 2, …) for a keyed create with a generated Short code:
   - `h = SHA-256(creator_id + ":" + key + ":" + n)`, using decimal *n* and UTF-8.
   - Read the first 8 bytes of `h` as a big-endian unsigned integer, reduce it mod 62⁷, and base62-encode it, zero-padded to 7 characters. The modulo bias is about 10⁻⁷.
+  - The base62 digits, in value order, are `0`–`9`, then `A`–`Z`, then `a`–`z`: digit 0 is `0` and digit 61 is `z`, so zero-padding adds leading `0`s.
   - The domain core owns this function, pinned by test vectors, just like the shard hash.
 - **The shard row gains `idempotency_key TEXT`,** NULL for unkeyed creates. It's an additive migration, and it rides the change log like every other column. It isn't copied to `LINKS` or to the Creator list.
 - **The `Idempotency-Key` is stored but never logged.** The shard row and the change log hold it, because that is how a retry is recognised. No Worker log line, Redirect event, audit record, Workflow parameter or CI log holds one.
