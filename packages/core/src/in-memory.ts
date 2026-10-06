@@ -2,7 +2,8 @@
 // nothing else (ADR 0001). They hold the same rules the Cloudflare adapters
 // do, without the durability.
 import type { LinksValue } from "./encoding.ts";
-import { applyDelete, type DeleteResult, type Deleter, type Link, type LinkId, type NamespaceId, toLinksValue } from "./link.ts";
+import { applyDelete, type DeleteResult, type Deleter, type Link, toLinksValue } from "./link.ts";
+import type { LinkId, NamespaceId } from "./link-id.ts";
 import type {
   AuthenticatedCreator,
   ClaimResult,

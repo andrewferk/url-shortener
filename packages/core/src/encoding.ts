@@ -1,7 +1,7 @@
 // Every permanent encoding the service writes. Each function here is pinned by
 // test vectors and never changes once data exists (ADR 0008): changing one
 // means moving every Link.
-import type { CreatorId, LinkId, NamespaceId } from "./link.ts";
+import type { CreatorId, LinkId, NamespaceId } from "./link-id.ts";
 import { BASE62_ALPHABET, GENERATED_LENGTH } from "./short-code.ts";
 
 /** Lowercases ASCII letters, the only case a Short code can have (ADR 0018). */

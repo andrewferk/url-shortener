@@ -1,13 +1,13 @@
-export { createLink, type CreateLinkPorts, type CreateLinkRequest, type CreateLinkResult } from "./create-link.ts";
-export {
-  InMemoryCreatorAuthenticator,
-  InMemoryLinkStore,
-  InMemoryRedirectRecorder,
-  ManualClock,
-  SequenceShortCodeGenerator,
-  StaticNamespaceResolver,
-} from "./in-memory.ts";
-export { decideRedirect, type RedirectDecision, type RedirectPorts, type RedirectRequest } from "./redirect.ts";
+// Modules are listed in dependency order: each imports only from modules
+// above it, so the core has no import cycles.
+export { type CreatorId, DEFAULT_NAMESPACE, type LinkId, type NamespaceId } from "./link-id.ts";export {
+  BASE62_ALPHABET,
+  type CustomAliasValidation,
+  GENERATED_LENGTH,
+  isPossibleShortCode,
+  RESERVED_ALIASES,
+  validateCustomAlias,
+} from "./short-code.ts";
 export {
   creatorObjectName,
   decodeLinksValue,
@@ -25,17 +25,13 @@ export {
 } from "./encoding.ts";
 export {
   applyDelete,
-  type CreatorId,
-  DEFAULT_NAMESPACE,
   type DeleteResult,
   type Deleter,
   type Deletion,
   type Link,
-  type LinkId,
   linkState,
   type LinkState,
   mergeLinkRecords,
-  type NamespaceId,
   toLinksValue,
   type VoidRecord,
 } from "./link.ts";
@@ -52,12 +48,14 @@ export type {
   RedirectRecorder,
   ShortCodeGenerator,
 } from "./ports.ts";
+export { RandomShortCodeGenerator } from "./generator.ts";
 export {
-  BASE62_ALPHABET,
-  type CustomAliasValidation,
-  GENERATED_LENGTH,
-  isPossibleShortCode,
-  RandomShortCodeGenerator,
-  RESERVED_ALIASES,
-  validateCustomAlias,
-} from "./short-code.ts";
+  InMemoryCreatorAuthenticator,
+  InMemoryLinkStore,
+  InMemoryRedirectRecorder,
+  ManualClock,
+  SequenceShortCodeGenerator,
+  StaticNamespaceResolver,
+} from "./in-memory.ts";
+export { createLink, type CreateLinkPorts, type CreateLinkRequest, type CreateLinkResult } from "./create-link.ts";
+export { decideRedirect, type RedirectDecision, type RedirectPorts, type RedirectRequest } from "./redirect.ts";

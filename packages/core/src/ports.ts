@@ -2,7 +2,8 @@
 // adapters over Cloudflare; `in-memory.ts` implements them for tests and for
 // embedders who bring nothing else.
 import type { LinksValue } from "./encoding.ts";
-import type { CreatorId, DeleteResult, Deleter, Link, LinkId, NamespaceId } from "./link.ts";
+import type { DeleteResult, Deleter, Link } from "./link.ts";
+import type { CreatorId, LinkId, NamespaceId } from "./link-id.ts";
 
 /** Reads a Link for a Redirect, in the shape `LINKS` holds (ADR 0008). */
 export interface LinkReader {
