@@ -1355,8 +1355,13 @@ spike_ret_setup() {
   # Retention applies only to runs made after it is set, so set it first.
   gh api -X PUT "repos/$RET_REPO/actions/permissions/artifact-and-log-retention" -F days=1 >/dev/null \
     || die "couldn't set the retention period."
-  days=$(gh api "repos/$RET_REPO/actions/permissions/artifact-and-log-retention" --jq .days)
-  [[ "$days" == 1 ]] || die "retention reads back as $days days, not 1."
+  # The new value can take some seconds to read back on a fresh repo.
+  for i in $(seq 1 12); do
+    days=$(gh api "repos/$RET_REPO/actions/permissions/artifact-and-log-retention" --jq .days 2>/dev/null || true)
+    [[ "$days" == 1 ]] && break
+    sleep 5
+  done
+  [[ "$days" == 1 ]] || die "retention still reads back as ${days:-nothing} days, not 1, a minute after setting it."
   ok "retention is 1 day"
   commit_file "$RET_REPO" ".github/workflows/deploy-record.yml" "$(ret_workflow)" >/dev/null
   ok "wrote the workflow"
