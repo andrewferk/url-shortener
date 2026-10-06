@@ -1269,13 +1269,23 @@ stage "Does --secrets-file remove a hand-set secret? (ADR 0032, ADR 0016)"
 spike_secrets() {
   need LD_DEPLOYED "Stage 8 hasn't deployed $LD_WORKER yet; re-run the wizard to do it." || return 0
   begin R_SECRETS || return 0
-  local dir="$WORK/links-data" before after rc file="$WORK/links-data/ci-secrets.json" has_hand has_ci
+  local dir="$WORK/links-data" before after rc file="$WORK/links-data/ci-secrets.json" has_hand has_ci undeployed=""
   names() { jq -r '[.[].name] | sort | join(",")' 2>/dev/null || true; }
   write_ld_worker
   say "On $LD_WORKER: set HAND_SET_SECRET by hand, then deploy with a --secrets-file that names"
   say "only CI_SECRET, and list the secrets."
-  openssl rand -hex 16 | wr "$CF_SETUP_TOKEN" "$dir" secret put HAND_SET_SECRET >"$LOGS/secrets-put.log" 2>&1 \
-    || die "wrangler secret put failed: $(excerpt "$LOGS/secrets-put.log")"
+  # Stage 11's `versions upload` leaves a version that isn't deployed, and
+  # `secret put` refuses to run while the latest version isn't live. Deploy
+  # again in that case and say so in the result.
+  if ! openssl rand -hex 16 | wr "$CF_SETUP_TOKEN" "$dir" secret put HAND_SET_SECRET >"$LOGS/secrets-put.log" 2>&1; then
+    grep -q "isn't currently deployed" "$LOGS/secrets-put.log" \
+      || die "wrangler secret put failed: $(excerpt "$LOGS/secrets-put.log")"
+    warn "secret put refused: the latest version (stage 11's versions upload) isn't deployed. Deploying it first."
+    undeployed="After stage 11's versions upload, wrangler secret put refused ('the latest version of your Worker isn't currently deployed') until a plain deploy; "
+    loud "$LOGS/secrets-redeploy.log" wr "$CF_SETUP_TOKEN" "$dir" deploy || die "the deploy failed; see above."
+    openssl rand -hex 16 | wr "$CF_SETUP_TOKEN" "$dir" secret put HAND_SET_SECRET >"$LOGS/secrets-put.log" 2>&1 \
+      || die "wrangler secret put failed: $(excerpt "$LOGS/secrets-put.log")"
+  fi
   before=$(wr "$CF_SETUP_TOKEN" "$dir" secret list --format json 2>/dev/null | names) || true
   [[ ",$before," == *,HAND_SET_SECRET,* ]] || die "HAND_SET_SECRET isn't listed after the put (listed: ${before:-nothing})."
   ok "before: $before"
@@ -1293,9 +1303,9 @@ spike_secrets() {
     return 0
   fi
   if [[ "$has_hand" == yes ]]; then
-    conclude SECRETS no "" "The hand-set secret survives. wrangler $WRANGLER_VERSION, Worker with exports: secrets before '$before'; after a deploy with --secrets-file naming only CI_SECRET: '$after'. links-data deploys with --secrets-file."
+    conclude SECRETS no "" "${undeployed}The hand-set secret survives. wrangler $WRANGLER_VERSION, Worker with exports: secrets before '$before'; after a deploy with --secrets-file naming only CI_SECRET: '$after'. links-data deploys with --secrets-file."
   else
-    conclude SECRETS yes "links-data deploys without --secrets-file and the admin job pushes its CI-held secrets with wrangler secret bulk (slice 1.5)." "The hand-set secret is REMOVED. wrangler $WRANGLER_VERSION: secrets before '$before'; after a deploy with --secrets-file naming only CI_SECRET: '$after'."
+    conclude SECRETS yes "links-data deploys without --secrets-file and the admin job pushes its CI-held secrets with wrangler secret bulk (slice 1.5)." "${undeployed}The hand-set secret is REMOVED. wrangler $WRANGLER_VERSION: secrets before '$before'; after a deploy with --secrets-file naming only CI_SECRET: '$after'."
   fi
 }
 spike_secrets
