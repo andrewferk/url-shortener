@@ -11,7 +11,7 @@ const job = `jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@${sha}
+      - uses: actions/checkout@${sha} # v7.0.1
 `;
 
 describe("lintWorkflow", () => {
@@ -108,9 +108,61 @@ jobs:
       const source = workflow(`permissions: {}
 jobs:
   deploy:
-    uses: some-org/some-repo/.github/workflows/deploy.yml@${sha}
+    uses: some-org/some-repo/.github/workflows/deploy.yml@${sha} # v1.2.0
 `);
       expect(lintWorkflow(source)).toEqual([]);
+    });
+
+    describe("version comments", () => {
+      const step = (uses: string) =>
+        workflow(`permissions: {}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ${uses}
+`);
+
+      it.each([`actions/checkout@${sha} # v7.0.1`, `actions/checkout@${sha}  #v7`, `actions/checkout@${sha} # 7.0.1`, `"actions/checkout@${sha}" # v7.0.1`])(
+        "passes %s",
+        (uses) => {
+          expect(lintWorkflow(step(uses))).toEqual([]);
+        },
+      );
+
+      it.each([`actions/checkout@${sha}`, `actions/checkout@${sha} # pinned`, `actions/checkout@${sha} # main`])(
+        "fails %s",
+        (uses) => {
+          expect(lintWorkflow(step(uses))).toEqual([
+            { line: 8, message: expect.stringContaining("version in a comment") as unknown },
+          ]);
+        },
+      );
+
+      it("fails a version comment on the next line", () => {
+        const source = workflow(`permissions: {}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@${sha}
+        # v7.0.1
+`);
+        expect(lintWorkflow(source)).toEqual([
+          { line: 8, message: expect.stringContaining("version in a comment") as unknown },
+        ]);
+      });
+
+      it("fails a reusable workflow called by SHA with no version comment", () => {
+        const source = workflow(`permissions: {}
+jobs:
+  deploy:
+    uses: some-org/some-repo/.github/workflows/deploy.yml@${sha}
+`);
+        expect(lintWorkflow(source)).toEqual([
+          { line: 6, message: expect.stringContaining("version in a comment") as unknown },
+        ]);
+      });
     });
 
     describe("in an example ops-repo caller", () => {

@@ -4,10 +4,11 @@
 //   unlisted becomes none. A job that needs write is granted it on that job.
 // - no job is granted `read-all` or `write-all`.
 // - every action and reusable workflow from another repo is pinned by a full
-//   commit SHA, and every Docker action by digest. An example ops-repo caller
+//   commit SHA, with its version in a comment on the same line, and every
+//   Docker action by digest. An example ops-repo caller
 //   may also call a reusable workflow by release tag, because Operators pin
 //   this repo's releases by tag (ADR 0015).
-import { isMap, isScalar, isSeq, LineCounter, parseDocument, type Node } from "yaml";
+import { isMap, isScalar, isSeq, LineCounter, parseDocument, type Node, type Scalar } from "yaml";
 
 export interface Problem {
   readonly line: number;
@@ -22,6 +23,9 @@ export interface Options {
 const pinnedBySha = /^[^@\s]+@[0-9a-f]{40}$/;
 const pinnedByReleaseTag = /^[^@\s]+@v\d+\.\d+\.\d+$/;
 const pinnedByDigest = /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/;
+// A trailing comment that starts with the pinned version, such as `# v7.0.1`,
+// which Dependabot reads and rewrites when it moves the SHA.
+const versionComment = /^\s+#\s*v?\d+(?:\.\d+)*\b/;
 
 export function lintWorkflow(source: string, options: Options = {}): Problem[] {
   const lineCounter = new LineCounter();
@@ -71,18 +75,18 @@ export function lintWorkflow(source: string, options: Options = {}): Problem[] {
 
     const workflowCall: unknown = job.get("uses", true);
     if (!(options.exampleCaller && isScalar(workflowCall) && pinnedByReleaseTag.test(String(workflowCall.value)))) {
-      checkPin(workflowCall, report);
+      checkPin(workflowCall, source, report);
     }
     const steps = job.get("steps", true);
     if (!isSeq(steps)) continue;
     for (const step of steps.items) {
-      if (isMap(step)) checkPin(step.get("uses", true), report);
+      if (isMap(step)) checkPin(step.get("uses", true), source, report);
     }
   }
   return problems;
 }
 
-function checkPin(uses: unknown, report: (node: Node, message: string) => void): void {
+function checkPin(uses: unknown, source: string, report: (node: Node, message: string) => void): void {
   if (!isScalar(uses)) return;
   const ref = String(uses.value);
   if (ref.startsWith("./")) return;
@@ -90,5 +94,13 @@ function checkPin(uses: unknown, report: (node: Node, message: string) => void):
     if (!pinnedByDigest.test(ref)) report(uses, `Pin \`${ref}\` by its image digest (\`@sha256:...\`).`);
   } else if (!pinnedBySha.test(ref)) {
     report(uses, `Pin \`${ref}\` by a full commit SHA, with its version in a comment.`);
+  } else if (!versionComment.test(restOfLine(uses, source))) {
+    report(uses, `Give \`${ref}\` its version in a comment on the same line, such as \`# v1.2.3\`.`);
   }
+}
+
+// The text after a scalar on its own line, where a trailing comment sits.
+function restOfLine(node: Scalar, source: string): string {
+  const end = node.range?.[1] ?? source.length;
+  return source.slice(end).split("\n", 1)[0] ?? "";
 }

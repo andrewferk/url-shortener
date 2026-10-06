@@ -55,7 +55,7 @@ Import a workspace package by its name, such as `@url-shortener/core`, so you ge
 
 Every workflow declares a top-level `permissions:` block ([ADR 0025](./docs/adr/0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md)). At the top level it may grant only `read` or `none`. A job that needs to write is granted that on the job itself, and no job is granted `read-all` or `write-all`.
 
-Every action and reusable workflow from another repository is pinned by a full commit SHA, with its version in a comment:
+Every action and reusable workflow from another repository is pinned by a full commit SHA, with its version in a comment on the same line:
 
 ```yaml
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
