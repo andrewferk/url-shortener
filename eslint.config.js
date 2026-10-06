@@ -17,7 +17,7 @@ const workspaceImports = [
 ];
 
 export default defineConfig(
-  globalIgnores(["**/node_modules/", "**/.wrangler/", "**/env.d.ts"]),
+  globalIgnores(["**/node_modules/", "**/.wrangler/", "workers/*/src/env.d.ts"]),
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   {

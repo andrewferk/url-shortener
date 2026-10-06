@@ -4,7 +4,9 @@
 //   unlisted becomes none. A job that needs write is granted it on that job.
 // - no job is granted `read-all` or `write-all`.
 // - every action and reusable workflow from another repo is pinned by a full
-//   commit SHA, and every Docker action by digest.
+//   commit SHA, and every Docker action by digest. An example ops-repo caller
+//   may also call a reusable workflow by release tag, because Operators pin
+//   this repo's releases by tag (ADR 0015).
 import { isMap, isScalar, isSeq, LineCounter, parseDocument, type Node } from "yaml";
 
 export interface Problem {
@@ -12,10 +14,16 @@ export interface Problem {
   readonly message: string;
 }
 
+export interface Options {
+  /** The workflow is one of `examples/ops-repo/`'s callers. */
+  readonly exampleCaller?: boolean;
+}
+
 const pinnedBySha = /^[^@\s]+@[0-9a-f]{40}$/;
+const pinnedByReleaseTag = /^[^@\s]+@v\d+\.\d+\.\d+$/;
 const pinnedByDigest = /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/;
 
-export function lintWorkflow(source: string): Problem[] {
+export function lintWorkflow(source: string, options: Options = {}): Problem[] {
   const lineCounter = new LineCounter();
   const document = parseDocument(source, { lineCounter });
   const lineOf = (node: Node | null | undefined): number =>
@@ -38,6 +46,8 @@ export function lintWorkflow(source: string): Problem[] {
   const permissions: unknown = root.get("permissions", true);
   if (permissions === undefined) {
     report(root, "Declare a top-level `permissions:` block granting only what the workflow needs (ADR 0025).");
+  } else if (isScalar(permissions) && permissions.value === null) {
+    report(permissions, "Top-level `permissions:` has no value; list each scope, or use `{}` for none (ADR 0025).");
   } else if (isScalar(permissions)) {
     report(permissions, `Top-level \`permissions: ${String(permissions.value)}\` grants every scope; list each scope instead (ADR 0025).`);
   } else if (isMap(permissions)) {
@@ -59,7 +69,10 @@ export function lintWorkflow(source: string): Problem[] {
       report(jobPermissions, `\`permissions: ${String(jobPermissions.value)}\` grants every scope; list each scope the job needs.`);
     }
 
-    checkPin(job.get("uses", true), report);
+    const workflowCall: unknown = job.get("uses", true);
+    if (!(options.exampleCaller && isScalar(workflowCall) && pinnedByReleaseTag.test(String(workflowCall.value)))) {
+      checkPin(workflowCall, report);
+    }
     const steps = job.get("steps", true);
     if (!isSeq(steps)) continue;
     for (const step of steps.items) {

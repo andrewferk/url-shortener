@@ -63,6 +63,8 @@ Every action and reusable workflow from another repository is pinned by a full c
 
 Dependabot opens the pull requests that move these pins. `npm run lint:workflows` checks both rules.
 
+The one exception is an example ops-repo caller under `examples/`: it may call a reusable workflow by release tag, such as `@v0.1.0`, because Operators pin this repo's releases by tag ([ADR 0015](./docs/adr/0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md)). Its actions are still pinned by SHA.
+
 ### No deployment values
 
 This repository never holds a deployment's values: no domain, account ID, zone ID, token ID or credential, in code, docs, tests or committed config ([ADR 0013](./docs/adr/0013-a-deployment-is-given-its-domain-and-owns-a-dedicated-zone.md), ADR 0015). Each Deployment keeps those in its own ops repo. Tests and examples use reserved names such as `example.com` or `.test`.

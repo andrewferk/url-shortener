@@ -36,6 +36,12 @@ describe("lintWorkflow", () => {
       ]);
     });
 
+    it("fails a top-level permissions key with no value", () => {
+      expect(lintWorkflow(workflow(`permissions:\n${job}`))).toEqual([
+        { line: 3, message: expect.stringContaining("no value") as unknown },
+      ]);
+    });
+
     it("fails a write permission granted to the whole workflow", () => {
       expect(lintWorkflow(workflow(`permissions:\n  contents: read\n  id-token: write\n${job}`))).toEqual([
         { line: 5, message: expect.stringContaining("`id-token: write`") as unknown },
@@ -105,6 +111,35 @@ jobs:
     uses: some-org/some-repo/.github/workflows/deploy.yml@${sha}
 `);
       expect(lintWorkflow(source)).toEqual([]);
+    });
+
+    describe("in an example ops-repo caller", () => {
+      const caller = (uses: string) =>
+        workflow(`permissions: {}
+jobs:
+  deploy:
+    uses: ${uses}
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+`);
+
+      it("passes a reusable workflow called by release tag, as ADR 0015's refs allow", () => {
+        expect(
+          lintWorkflow(caller("some-org/some-repo/.github/workflows/deploy.yml@v0.1.0"), {
+            exampleCaller: true,
+          }),
+        ).toEqual([{ line: 10, message: expect.stringContaining("actions/checkout@v7") as unknown }]);
+      });
+
+      it("fails a reusable workflow called by a branch", () => {
+        expect(
+          lintWorkflow(caller("some-org/some-repo/.github/workflows/deploy.yml@main"), {
+            exampleCaller: true,
+          }).map((problem) => problem.line),
+        ).toEqual([6, 10]);
+      });
     });
 
     it("passes a local action or workflow", () => {

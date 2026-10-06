@@ -1,7 +1,7 @@
 {
-  "extends": "../../../tsconfig.base.json",
+  // The core's tests run under Node, so they also see Node's types.
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2024", "WebWorker"],
     "types": ["node"]
   },
   "include": ["."]

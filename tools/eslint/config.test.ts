@@ -10,6 +10,8 @@ const eslint = new ESLint({
   overrideConfig: tseslint.configs.disableTypeChecked,
 });
 
+// The rule ID of each problem, or the message of one with no rule, such as a
+// parsing error, so a test that expects a rule shows why it didn't fire.
 async function ruleIds(filePath: string, code: string): Promise<string[]> {
   const [result] = await eslint.lintText(code, { filePath });
   return (result?.messages ?? []).map((message) => message.ruleId ?? message.message);
@@ -33,6 +35,13 @@ describe("the core boundary", () => {
 
   it("fails a Workers type in the core's tests too", async () => {
     expect(await ruleIds("packages/core/test/fixture.test.ts", workersTypeInCore)).toContain(
+      "url-shortener/no-cloudflare-in-core",
+    );
+  });
+
+  it("fails Workers types referenced from a declaration file in the core", async () => {
+    const code = '/// <reference types="@cloudflare/workers-types" />\nexport {};\n';
+    expect(await ruleIds("packages/core/src/env.d.ts", code)).toContain(
       "url-shortener/no-cloudflare-in-core",
     );
   });

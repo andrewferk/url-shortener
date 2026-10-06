@@ -13,7 +13,7 @@ import { AST_NODE_TYPES, AST_TOKEN_TYPES, ESLintUtils, type TSESTree } from "@ty
 import type { Scope } from "@typescript-eslint/utils/ts-eslint";
 import ts from "typescript";
 
-const cloudflareModule = /^(?:cloudflare:|@cloudflare\/|wrangler$|miniflare$|workerd$)/;
+const cloudflareModule = /^(?:cloudflare:|@cloudflare\/|wrangler$)/;
 const tripleSlashTypes = /^\/\s*<reference\s+types\s*=\s*["']([^"']+)["']/;
 const wranglerGenerated = ["Env", "Cloudflare"];
 const coreLibs = ["es2024", "webworker"];
@@ -56,7 +56,7 @@ export const noCloudflareInCore = ESLintUtils.RuleCreator.withoutDocs({
         checkLiteral(node.source);
       },
       TSImportType(node) {
-        checkLiteral(importTypeSource(node));
+        checkLiteral(node.source);
       },
       TSExternalModuleReference(node) {
         checkLiteral(node.expression);
@@ -84,15 +84,6 @@ export const noCloudflareInCore = ESLintUtils.RuleCreator.withoutDocs({
   },
 });
 
-// `typeof import("x")`: typescript-eslint has moved the specifier between
-// versions, so read whichever is present.
-function importTypeSource(node: TSESTree.TSImportType): TSESTree.Node | undefined {
-  const withSource = node as { source?: TSESTree.Node };
-  if (withSource.source) return withSource.source;
-  const argument = (node as { argument?: TSESTree.Node }).argument;
-  return argument?.type === AST_NODE_TYPES.TSLiteralType ? argument.literal : argument;
-}
-
 // References no declaration in the file resolves: through the global scope,
 // or to a global that only a lib or the config declares.
 function* unresolvedGlobals(globalScope: Scope.Scope): Iterable<Scope.Reference> {
@@ -102,16 +93,19 @@ function* unresolvedGlobals(globalScope: Scope.Scope): Iterable<Scope.Reference>
   }
 }
 
-let cached: ReadonlySet<string> | undefined;
+let workersOnlyGlobalsCache: ReadonlySet<string> | undefined;
 
 function workersOnlyGlobals(): ReadonlySet<string> {
-  if (cached) return cached;
+  if (workersOnlyGlobalsCache) return workersOnlyGlobalsCache;
   const require = createRequire(import.meta.url);
   const workers = declaredGlobals([require.resolve("@cloudflare/workers-types/index.d.ts")]);
   const libDir = dirname(require.resolve("typescript/lib/lib.d.ts"));
   const web = declaredGlobals(coreLibs.map((lib) => join(libDir, `lib.${lib}.d.ts`)));
-  cached = new Set([...wranglerGenerated, ...[...workers].filter((name) => !web.has(name))]);
-  return cached;
+  workersOnlyGlobalsCache = new Set([
+    ...wranglerGenerated,
+    ...[...workers].filter((name) => !web.has(name)),
+  ]);
+  return workersOnlyGlobalsCache;
 }
 
 // The names a set of declaration files puts in the global scope, following
