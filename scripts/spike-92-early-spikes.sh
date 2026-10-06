@@ -1480,6 +1480,8 @@ spike_kv_read() {
     if [[ "$CF_STATUS" == 200 ]] && jq -e '.errors == null' "$CF_BODY" >/dev/null 2>&1; then
       analytics=$(jq '[.. | .sum? | .requests? | numbers] | add // 0' "$CF_BODY")
       say "KV analytics (GraphQL, this namespace, reads since $date): ${BOLD}$analytics${RESET}"
+      note "That dataset is adaptively sampled, so a burst reads back as an estimate (1000 can show as 850 or 1150)."
+      note "What matters is the order of magnitude: near $sent means every cached read counted; near 1 means only the cache miss did."
     else
       analytics="unavailable"
       bad "the GraphQL query failed (HTTP $CF_STATUS): $(jq -c '.errors' "$CF_BODY" 2>/dev/null | cut -c1-300 | scrub)"
@@ -1501,7 +1503,7 @@ spike_kv_read() {
   ask KV_BILLED_NOTE "Note (the exact label of the figure, other KV traffic that day, anything odd):"
   [[ -n "$KV_BILLED" ]] || KV_BILLED="unavailable"
   write_env KV_BILLED "$KV_BILLED"
-  billed_note="Read count: $sent (one key, cacheTtl 30, burst of $KV_SECONDS s, colos: $KV_COLOS, $date $at UTC). KV analytics: $analytics. Billed usage: $KV_BILLED. ${KV_BILLED_NOTE:+Note: $KV_BILLED_NOTE}"
+  billed_note="Read count: $sent (one key, cacheTtl 30, burst of $KV_SECONDS s, colos: $KV_COLOS, $date $at UTC). KV analytics (sampled): $analytics. Billed usage: $KV_BILLED. ${KV_BILLED_NOTE:+Note: $KV_BILLED_NOTE}"
   if [[ "$KV_BILLED" =~ ^[0-9]+$ ]] && (( KV_BILLED * 10 >= sent * 9 )); then
     suggestion=billed
   elif [[ "$KV_BILLED" =~ ^[0-9]+$ ]] && (( KV_BILLED * 10 <= sent )); then
