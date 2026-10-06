@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.DS_Store

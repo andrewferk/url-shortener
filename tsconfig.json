@@ -1,0 +1,17 @@
+{
+  // Repo tooling and config files. Each workspace has its own tsconfig.json.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "*.ts",
+    "*.js",
+    "tools",
+    "packages/*/vitest.config.ts",
+    "workers/*/vitest.config.ts"
+  ]
+}

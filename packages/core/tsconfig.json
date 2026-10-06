@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The core is portable: web-standard globals only, no Workers or Node types.
+    "lib": ["ES2024", "WebWorker"],
+    "types": []
+  },
+  "include": ["src"]
+}

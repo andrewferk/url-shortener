@@ -1,0 +1,8 @@
+{
+  // The core's tests run under Node, so they also see Node's types.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["."]
+}

@@ -1,0 +1,8 @@
+# Keeps the SHA pins in .github/workflows current. Dependabot rewrites the SHA
+# and the version comment beside it together.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

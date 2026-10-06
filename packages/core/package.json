@@ -1,0 +1,11 @@
+{
+  "name": "@url-shortener/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "The domain core: pure TypeScript that never imports Cloudflare (ADR 0001).",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
