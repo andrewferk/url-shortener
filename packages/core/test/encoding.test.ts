@@ -8,6 +8,7 @@ import {
   creatorObjectName,
   decodeLinksValue,
   encodeLinksValue,
+  fold,
   keyedCandidate,
   linksKey,
   type LinksValue,
@@ -15,6 +16,22 @@ import {
   shardObjectName,
   targetUrlSha256,
 } from "@url-shortener/core";
+
+describe("fold", () => {
+  // Only the ASCII letters A–Z are folded (ADR 0018). Unicode case mapping
+  // (`toLowerCase`) would fold the Kelvin sign to an ASCII `k` and grow `İ` into
+  // two characters, so non-ASCII input is left exactly as it is.
+  it.each([
+    ["Ab3xYz9", "ab3xyz9"],
+    ["launch-2026_Q4", "launch-2026_q4"],
+    ["Key", "Key"],
+    ["İx", "İx"],
+    ["ΣA", "Σa"],
+    ["ÉtÉ", "ÉtÉ"],
+  ])("folds %j to %j", (shortCode, folded) => {
+    expect(fold(shortCode)).toBe(folded);
+  });
+});
 
 describe("shardNumber", () => {
   // The first byte of SHA-256 over `<Namespace ID>:<fold(Short code)>`.
