@@ -1,5 +1,5 @@
 import { type DeletedBy, type LinksValue, targetUrlSha256 } from "./encoding.ts";
-import type { CreatorId, EpochMs, LinkId } from "./link-id.ts";
+import { type CreatorId, type EpochMs, type LinkId, sameLink } from "./link-id.ts";
 
 export interface Link extends LinkId {
   /** The empty string once the Link is deleted. */
@@ -56,14 +56,10 @@ export interface VoidRecord extends LinkId {
 export function mergeLinkRecords(records: readonly Link[], voids: readonly VoidRecord[]): Link | null {
   const [first] = records;
   if (first === undefined) return null;
-  if (records.some((record) => record.namespace !== first.namespace || record.shortCode !== first.shortCode)) {
+  if (records.some((record) => !sameLink(record, first))) {
     throw new Error("mergeLinkRecords takes the records of one Link");
   }
-  const voided = new Set(
-    voids
-      .filter((record) => record.namespace === first.namespace && record.shortCode === first.shortCode)
-      .map((record) => record.deletedAt),
-  );
+  const voided = new Set(voids.filter((record) => sameLink(record, first)).map((record) => record.deletedAt));
   let merged: Link | null = null;
   for (const record of records) {
     if (record.deletion !== undefined && voided.has(record.deletion.at)) continue;

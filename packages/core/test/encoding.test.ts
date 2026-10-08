@@ -157,8 +157,8 @@ describe("keyedCandidate", { tags: ["adr-0009"] }, () => {
     ["cr_4fK9pQ2xZ7", "retry-key_0123456789", 1, "ZvYcU8r"],
     ["cr_4fK9pQ2xZ7", "retry-key_0123456789", 2, "9MR0bfj"],
     ["cr_4fK9pQ2xZ7", "padding-key-000001", 0, "0sNFPdh"],
-  ])("derives candidate %s / %s / %i as %s", async (creatorId, key, n, shortCode) => {
-    expect(await keyedCandidate(creatorId, key, n)).toBe(shortCode);
+  ])("derives candidate %s / %s / %i as %s", async (creatorId, key, candidateIndex, shortCode) => {
+    expect(await keyedCandidate(creatorId, key, candidateIndex)).toBe(shortCode);
   });
 });
 

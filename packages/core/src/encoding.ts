@@ -98,8 +98,8 @@ export function decodeLinksValue(json: unknown): LinksValue {
   };
 }
 
-export async function keyedCandidate(creatorId: CreatorId, idempotencyKey: string, n: number): Promise<string> {
-  const digest = await sha256(`${creatorId}:${idempotencyKey}:${String(n)}`);
+export async function keyedCandidate(creatorId: CreatorId, idempotencyKey: string, candidateIndex: number): Promise<string> {
+  const digest = await sha256(`${creatorId}:${idempotencyKey}:${String(candidateIndex)}`);
   let value = new DataView(digest.buffer).getBigUint64(0) % CODE_SPACE;
   let shortCode = "";
   for (let i = 0; i < GENERATED_LENGTH; i++) {
