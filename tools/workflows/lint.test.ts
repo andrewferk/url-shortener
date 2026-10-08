@@ -23,7 +23,7 @@ describe("lintWorkflow", () => {
     expect(lintWorkflow(workflow(`permissions: {}\n${job}`))).toEqual([]);
   });
 
-  describe("permissions", () => {
+  describe("permissions", { tags: ["adr-0025"] }, () => {
     it("fails a workflow with no top-level permissions block", () => {
       expect(lintWorkflow(workflow(job))).toEqual([
         { line: 1, message: expect.stringContaining("top-level `permissions:`") as unknown },
@@ -76,7 +76,7 @@ jobs:
     });
   });
 
-  describe("action pins", () => {
+  describe("action pins", { tags: ["adr-0016"] }, () => {
     it.each(["actions/checkout@v7", "actions/checkout@main", "actions/checkout@3d3c42e", "actions/checkout"])(
       "fails a step that uses %s",
       (uses) => {
@@ -165,7 +165,7 @@ jobs:
       });
     });
 
-    describe("in an example ops-repo caller", () => {
+    describe("in an example ops-repo caller", { tags: ["adr-0015"] }, () => {
       const caller = (uses: string) =>
         workflow(`permissions: {}
 jobs:
@@ -177,7 +177,7 @@ jobs:
       - uses: actions/checkout@v7
 `);
 
-      it("passes a reusable workflow called by release tag, as ADR 0015's refs allow", () => {
+      it("passes a reusable workflow called by release tag", () => {
         expect(
           lintWorkflow(caller("some-org/some-repo/.github/workflows/deploy.yml@v0.1.0"), {
             exampleCaller: true,

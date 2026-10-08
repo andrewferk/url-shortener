@@ -1,7 +1,6 @@
-// The Redirect Worker's checked-in base configuration (ADR 0016): `main` and
-// compatibility settings only. The render script builds each environment's
-// configuration from it and OpenTofu's outputs, so it holds no deployment
-// value. The integration tests run the Worker from it as it is.
+// The render script builds each environment's configuration from this base and
+// OpenTofu's outputs, so it holds no deployment value. The integration tests run
+// the Worker from it as it is.
 {
   "name": "redirect",
   "main": "src/index.ts",

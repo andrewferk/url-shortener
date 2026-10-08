@@ -20,7 +20,7 @@ async function ruleIds(filePath: string, code: string): Promise<string[]> {
 const cloudflareInCore = 'import { DurableObject } from "cloudflare:workers";\nexport class Shard extends DurableObject {}\n';
 const workersTypeInCore = "export function read(kv: KVNamespace): KVNamespace {\n  return kv;\n}\n";
 
-describe("the core boundary", () => {
+describe("the core boundary", { tags: ["adr-0001", "adr-0015"] }, () => {
   it("fails a cloudflare:* import in the core", async () => {
     expect(await ruleIds("packages/core/src/fixture.ts", cloudflareInCore)).toContain(
       "url-shortener/no-cloudflare-in-core",
@@ -60,7 +60,7 @@ describe("the core boundary", () => {
   });
 });
 
-describe("imports of a workspace package", () => {
+describe("imports of a workspace package", { tags: ["adr-0015"] }, () => {
   it("allow the package's exports map", async () => {
     const code = 'import { decideRedirect } from "@url-shortener/core";\nexport const decide = decideRedirect;\n';
     expect(await ruleIds("workers/redirect/src/fixture.ts", code)).toEqual([]);

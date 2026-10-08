@@ -1,13 +1,3 @@
-// Checks a GitHub Actions workflow against this repo's rules:
-// - it declares a top-level `permissions:` block that grants nothing but read
-//   (ADR 0025). An explicit block overrides the repo's default, and anything
-//   unlisted becomes none. A job that needs write is granted it on that job.
-// - no job is granted `read-all` or `write-all`.
-// - every action and reusable workflow from another repo is pinned by a full
-//   commit SHA, with its version in a comment on the same line, and every
-//   Docker action by digest. An example ops-repo caller
-//   may also call a reusable workflow by release tag, because Operators pin
-//   this repo's releases by tag (ADR 0015).
 import { isMap, isScalar, isSeq, LineCounter, parseDocument, type Node, type Scalar } from "yaml";
 
 export interface Problem {
