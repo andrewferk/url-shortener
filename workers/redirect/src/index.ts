@@ -1,8 +1,7 @@
 import { type Clock, decideRedirect, type LinkReader, StaticNamespaceResolver } from "@url-shortener/core";
 
-// Until slice 1.3 renders the Short domains from deployment config and reads
-// `LINKS`, no hostname maps to a Namespace and no Link exists, so every
-// Redirect is a 404.
+// No Short domain is configured and `LINKS` is not read yet, so no hostname
+// maps to a Namespace, no Link exists, and every Redirect is a 404.
 const namespaces = new StaticNamespaceResolver({});
 const links: LinkReader = { read: () => Promise.resolve(null) };
 const clock: Clock = { now: () => Date.now() };

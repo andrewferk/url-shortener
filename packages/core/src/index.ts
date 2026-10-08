@@ -1,6 +1,7 @@
 // Modules are listed in dependency order: each imports only from modules
 // above it, so the core has no import cycles.
-export { type CreatorId, DEFAULT_NAMESPACE, type LinkId, type NamespaceId } from "./link-id.ts";export {
+export { type CreatorId, DEFAULT_NAMESPACE, type LinkId, type NamespaceId } from "./link-id.ts";
+export {
   BASE62_ALPHABET,
   type CustomAliasValidation,
   GENERATED_LENGTH,
