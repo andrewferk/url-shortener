@@ -3,8 +3,6 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import tseslint from "typescript-eslint";
 import { plugin } from "./tools/eslint/plugin.ts";
 
-// A workspace package is imported only by its name, through its `exports` map
-// (ADR 0015): never by a deep path, and never by a relative path into it.
 const workspaceImports = [
   {
     group: ["@url-shortener/*/**"],

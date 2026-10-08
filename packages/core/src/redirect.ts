@@ -1,5 +1,4 @@
-// A placeholder for the Redirect decision, which slice 1.2 replaces with 302,
-// 404 and 410 Gone. Until then no Link exists, so every Redirect is a 404.
+// A placeholder: until a Link can exist, every Redirect is a 404.
 export interface RedirectDecision {
   readonly status: 404;
 }

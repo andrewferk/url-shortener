@@ -1,5 +1,5 @@
-# This repo's CI (ADR 0015). It holds no secrets, so a fork's pull request runs
-# all of it like any other. The `CI` job is the one required check.
+# This workflow holds no secrets, so a fork's pull request runs all of it
+# like any other. The `CI` job is the one required check.
 name: CI
 
 on:

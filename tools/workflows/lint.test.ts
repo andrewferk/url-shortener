@@ -177,7 +177,7 @@ jobs:
       - uses: actions/checkout@v7
 `);
 
-      it("passes a reusable workflow called by release tag, as ADR 0015's refs allow", () => {
+      it("passes a reusable workflow called by release tag", () => {
         expect(
           lintWorkflow(caller("some-org/some-repo/.github/workflows/deploy.yml@v0.1.0"), {
             exampleCaller: true,

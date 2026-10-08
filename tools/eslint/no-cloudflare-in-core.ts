@@ -1,7 +1,3 @@
-// The domain core never imports `cloudflare:*` or uses a Workers type
-// (ADR 0001), so it runs under plain Node and could move to another runtime
-// with new adapters only.
-//
 // A Workers type is any global that @cloudflare/workers-types declares and the
 // core's own libs (ES2024 and WebWorker) don't, plus the `Env` and `Cloudflare`
 // globals Wrangler generates for each Worker. The set is read from the
