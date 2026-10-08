@@ -78,10 +78,34 @@ To move a version, change every copy in one pull request. `npm run lint:versions
 
 This repository never holds a deployment's values: no domain, account ID, zone ID, token ID or credential, in code, docs, tests or committed config ([ADR 0013](./docs/adr/0013-a-deployment-is-given-its-domain-and-owns-a-dedicated-zone.md), ADR 0015). Each Deployment keeps those in its own ops repo. Tests and examples use reserved names such as `example.com` or `.test`.
 
+### Comments cite no document
+
+Names, types and test names carry the facts about the code. A comment is for a non-obvious why that none of those can hold, and it states the fact without naming where it came from: no comment cites an ADR, issue, pull request, slice or spec section. This holds in every source and config file, including Terraform, workflows and ESLint config. Markdown is exempt, so docs such as this file cite ADRs freely, and a lint rule's message may name the ADR it enforces, because the reader has just broken it. CI does not check this rule yet.
+
+The link between a change and its decision lives in the pull request, the commit and the test:
+
+- The pull request description explains the change, says `Closes #N` for the issue it finishes, and names the ADRs it implements.
+- Each commit ends with a trailer per decision and per issue it touches, one value per line, using the repo's own spelling of an ADR:
+
+  ```text
+  Implements: ADR 0009
+  Refs: #94
+  ```
+
+  A pull request is squash-merged, and the squash body is the branch's commit messages, so the trailers reach `main` and `git log --grep "ADR 0009"` finds every implementing commit. Whoever merges ends the squash message with the trailers, editing it if GitHub has bulleted them.
+- A test that proves a rule an ADR states carries the ADR as a Vitest tag on its `describe`, spelled `adr-0009` because a tag name allows no space:
+
+  ```ts
+  describe("keyedCandidate", { tags: ["adr-0009"] }, () => {
+    it("gives up after 8 candidates", () => {
+  ```
+
+  `describe` names the exported symbol or a `CONTEXT.md` term, `it` states the behaviour in plain words with the number or rule in it, and the ADR appears only in the tag, never in a title. `vitest.config.ts` reads the tag list from the files in `docs/adr/`, so a new ADR is a tag at once, a tag for an ADR that does not exist fails the run, `npx vitest run --tags-filter=adr-0009` runs one decision's tests, and `npx vitest --list-tags` prints the index. Vitest's file-wide `@module-tag` comment is not used: it is a comment that cites a document.
+
 ## Pull requests
 
 - Keep one change to one pull request, with tests for the behaviour it adds or fixes.
-- Explain the change, and link the issue or ADR it implements.
+- Explain the change, and link its issue and ADRs the way [Comments cite no document](#comments-cite-no-document) says: in the description, the commit trailers and the test tags, never in a comment.
 - Make sure `npm run lint`, `npm run typecheck` and `npm test` pass locally.
 
 ## Licensing
