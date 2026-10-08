@@ -1,6 +1,5 @@
-// No import cycles anywhere in the repo, type-only imports included: a cycle
-// that only types close still tangles the modules. ESLint's `import-x/no-cycle`
-// skips `import type`, so this is checked here instead.
+// Not ESLint's `import-x/no-cycle`: it skips `import type`, and a cycle that
+// only types close still tangles the modules.
 /** @type {import("dependency-cruiser").IConfiguration} */
 export default {
   forbidden: [
@@ -16,8 +15,7 @@ export default {
     tsPreCompilationDeps: true,
     doNotFollow: { path: "node_modules" },
     exclude: { path: "(^|/)(node_modules|\\.wrangler)/" },
-    // Follow a workspace package through its `exports` map (ADR 0015), so a
-    // cycle that crosses packages is caught too.
+    // Without these, a workspace package's import is unresolved and a cycle across packages goes unseen.
     enhancedResolveOptions: { exportsFields: ["exports"], conditionNames: ["import", "default"] },
   },
 };

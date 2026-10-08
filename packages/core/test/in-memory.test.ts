@@ -18,7 +18,7 @@ const link: Link = {
   createdAt: created,
 };
 
-describe("InMemoryLinkStore", () => {
+describe("InMemoryLinkStore", { tags: ["adr-0002", "adr-0005", "adr-0019"] }, () => {
   it("answers a failed claim with the Link already holding the Short code", async () => {
     const store = new InMemoryLinkStore();
     await store.claim(link);
@@ -40,7 +40,6 @@ describe("InMemoryLinkStore", () => {
         deletion: {
           at: deletedAt,
           by: "creator",
-          // The pinned vector for https://example.com/ (ADR 0019).
           targetUrlSha256: "0f115db062b7c0dd030b16878c99dea5c354b49dc37b38eb8846179c7783e9d7",
         },
       },

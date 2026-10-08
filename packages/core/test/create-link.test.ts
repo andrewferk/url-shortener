@@ -16,7 +16,7 @@ function setup(codes: string[] = ["Ab3xYz9"]) {
   return { registry, ports };
 }
 
-describe("createLink", () => {
+describe("createLink", { tags: ["adr-0002", "adr-0014"] }, () => {
   it("creates a Link with a generated Short code in the Creator's Namespace", async () => {
     const { registry, ports } = setup();
 
@@ -68,7 +68,7 @@ describe("createLink", () => {
     });
   });
 
-  describe("with a Custom alias", () => {
+  describe("with a Custom alias", { tags: ["adr-0018"] }, () => {
     it("creates a Link with the alias exactly as sent", async () => {
       const { ports } = setup();
 

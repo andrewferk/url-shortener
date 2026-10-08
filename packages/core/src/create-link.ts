@@ -1,4 +1,5 @@
 import type { Link } from "./link.ts";
+import type { EpochMs } from "./link-id.ts";
 import type { AuthenticatedCreator, Clock, LinkRegistry, ShortCodeGenerator } from "./ports.ts";
 import { validateCustomAlias } from "./short-code.ts";
 
@@ -6,8 +7,7 @@ export interface CreateLinkRequest {
   readonly creator: AuthenticatedCreator;
   readonly targetUrl: string;
   readonly customAlias?: string;
-  /** Epoch ms. */
-  readonly expiresAt?: number;
+  readonly expiresAt?: EpochMs;
 }
 
 export interface CreateLinkPorts {
@@ -21,15 +21,8 @@ export type CreateLinkResult =
   | { readonly created: false; readonly reason: "invalid_alias"; readonly problem: "length" | "characters" | "reserved" }
   | { readonly created: false; readonly reason: "alias_taken" | "unavailable" };
 
-/** How many generated Short codes a create draws before giving up (ADR 0002's small, bounded retry budget). */
 const MAX_DRAWS = 8;
 
-/**
- * Creates a Link in the Creator's Namespace (ADR 0014), claiming its Short
- * code through the registry, the only guard on uniqueness (ADR 0002). A
- * generated Short code that is already claimed is drawn again; a Custom alias
- * that is claimed, by a live, Expired or Deleted link, is taken for good.
- */
 export async function createLink(request: CreateLinkRequest, ports: CreateLinkPorts): Promise<CreateLinkResult> {
   const link = (shortCode: string, customAlias: boolean): Link => ({
     namespace: request.creator.namespace,

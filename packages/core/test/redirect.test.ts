@@ -32,7 +32,7 @@ function link(overrides: Partial<Link> = {}): Link {
   };
 }
 
-describe("decideRedirect", { tags: ["adr-0001"] }, () => {
+describe("decideRedirect", { tags: ["adr-0001", "adr-0014", "adr-0018"] }, () => {
   it("answers 302 to the Target URL for a live Link", async () => {
     const { links, redirect } = setup();
     await links.claim(link());
@@ -64,8 +64,7 @@ describe("decideRedirect", { tags: ["adr-0001"] }, () => {
     expect(await redirect("https://acme.test/Ab3xYz9")).toEqual({ status: 302, location: "https://example.com/acme" });
   });
 
-  describe("the malformed shape check", () => {
-    // Malformed requests answer 404 before any lookup (ADRs 0004, 0014).
+  describe("the malformed shape check", { tags: ["adr-0004"] }, () => {
     const neverRead = {
       read: () => Promise.reject(new Error("a malformed request must never reach storage")),
     };
@@ -75,19 +74,19 @@ describe("decideRedirect", { tags: ["adr-0001"] }, () => {
         { namespaces: new StaticNamespaceResolver({ "short.test": "default" }), links: neverRead, clock: new ManualClock(created) },
       );
 
-    it("answers 404 for a hostname mapped to no Namespace", async () => {
+    it("answers 404 before any lookup for a hostname mapped to no Namespace", async () => {
       expect(await decide("elsewhere.test", "/Ab3xYz9")).toEqual({ status: 404, reason: "malformed" });
     });
 
     it.each(["/", "/ab", `/${"a".repeat(33)}`, "/Ab3xYz9/", "/a/b", "/robots.txt", "/Ab3xYz9+", "/caf%C3%A9", "/api", "/Admin"])(
-      "answers 404 for the path %s",
+      "answers 404 before any lookup for the path %s",
       async (path) => {
         expect(await decide("short.test", path)).toEqual({ status: 404, reason: "malformed" });
       },
     );
   });
 
-  describe("Expiry, evaluated through the Clock", () => {
+  describe("Expiry, evaluated through the Clock", { tags: ["adr-0006"] }, () => {
     const expiresAt = created + 60_000;
 
     it("redirects until the Expiry", async () => {

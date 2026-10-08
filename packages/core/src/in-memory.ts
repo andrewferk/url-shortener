@@ -1,6 +1,3 @@
-// In-memory adapters for every port, so the core runs under plain Node with
-// nothing else (ADR 0001). They hold the same rules the Cloudflare adapters
-// do, without the durability.
 import type { LinksValue } from "./encoding.ts";
 import { applyDelete, type DeleteResult, type Deleter, type Link, toLinksValue } from "./link.ts";
 import type { LinkId, NamespaceId } from "./link-id.ts";
@@ -17,11 +14,6 @@ import type {
   ShortCodeGenerator,
 } from "./ports.ts";
 
-/**
- * One store behind both `LinkRegistry` and `LinkReader`, like a shard
- * answering a KV miss. A Link's row is kept for good once claimed, deleted or
- * not, so a Short code is never reissued (ADR 0002).
- */
 export class InMemoryLinkStore implements LinkRegistry, LinkReader {
   readonly #links = new Map<string, Link>();
 
@@ -44,13 +36,12 @@ export class InMemoryLinkStore implements LinkRegistry, LinkReader {
   }
 }
 
-// The store's own map key, not a `LINKS` key. Neither a Namespace ID nor a
-// Short code contains `:` (ADR 0014), so it is unambiguous.
+// Neither a Namespace ID nor a Short code contains `:`, so this key is unambiguous.
 function storeKey(id: LinkId): string {
   return `${id.namespace}:${id.shortCode}`;
 }
 
-/** Proposes the given Short codes in order, and throws once they run out. */
+/** Throws once the given Short codes run out. */
 export class SequenceShortCodeGenerator implements ShortCodeGenerator {
   readonly #codes: string[];
 
@@ -65,7 +56,6 @@ export class SequenceShortCodeGenerator implements ShortCodeGenerator {
   }
 }
 
-/** A Clock that moves only when told to. */
 export class ManualClock implements Clock {
   #now: number;
 
@@ -86,7 +76,6 @@ export class ManualClock implements Clock {
   }
 }
 
-/** Keeps every Redirect event it is given, in order. */
 export class InMemoryRedirectRecorder implements RedirectRecorder {
   readonly events: RedirectEvent[] = [];
 
@@ -95,7 +84,6 @@ export class InMemoryRedirectRecorder implements RedirectRecorder {
   }
 }
 
-/** Authenticates from a fixed table of credentials. Anything not in it is `null`. */
 export class InMemoryCreatorAuthenticator implements CreatorAuthenticator {
   readonly #creators: ReadonlyMap<string, AuthenticatedCreator>;
 
@@ -108,7 +96,6 @@ export class InMemoryCreatorAuthenticator implements CreatorAuthenticator {
   }
 }
 
-/** Maps each Short domain to its Namespace from a fixed table, as a Deployment's config does (ADR 0014). */
 export class StaticNamespaceResolver implements NamespaceResolver {
   readonly #namespaces: ReadonlyMap<string, NamespaceId>;
 

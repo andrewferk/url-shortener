@@ -1,8 +1,5 @@
-// Pinned test vectors for every permanent encoding (ADRs 0008, 0009, 0014,
-// 0018, 0019, 0028). Every adapter, in any language, must reproduce them
-// exactly. A vector never changes once merged: a failing vector means the code
-// is wrong, not the vector. The expected values were computed outside this
-// codebase, with Python's hashlib and json.
+// A failing vector means the code is wrong, never the vector. The expected
+// values were computed outside this codebase, with Python's hashlib and json.
 import { describe, expect, it } from "vitest";
 import {
   creatorObjectName,
@@ -17,24 +14,20 @@ import {
   targetUrlSha256,
 } from "@url-shortener/core";
 
-describe("fold", () => {
-  // Only the ASCII letters A–Z are folded (ADR 0018). Unicode case mapping
-  // (`toLowerCase`) would fold the Kelvin sign to an ASCII `k` and grow `İ` into
-  // two characters, so non-ASCII input is left exactly as it is.
+describe("fold", { tags: ["adr-0018"] }, () => {
   it.each([
     ["Ab3xYz9", "ab3xyz9"],
     ["launch-2026_Q4", "launch-2026_q4"],
-    ["Key", "Key"],
-    ["İx", "İx"],
-    ["ΣA", "Σa"],
-    ["ÉtÉ", "ÉtÉ"],
-  ])("folds %j to %j", (shortCode, folded) => {
+    ["\u212Aey", "\u212Aey"],
+    ["\u0130x", "\u0130x"],
+    ["\u03A3A", "\u03A3a"],
+    ["\u00C9t\u00C9", "\u00C9t\u00C9"],
+  ])("folds only the ASCII letters A–Z: %j to %j", (shortCode, folded) => {
     expect(fold(shortCode)).toBe(folded);
   });
 });
 
-describe("shardNumber", () => {
-  // The first byte of SHA-256 over `<Namespace ID>:<fold(Short code)>`.
+describe("shardNumber", { tags: ["adr-0008", "adr-0014", "adr-0018"] }, () => {
   it.each([
     ["default", "Ab3xYz9", 39],
     ["default", "Sale", 138],
@@ -58,8 +51,7 @@ describe("shardNumber", () => {
   });
 });
 
-describe("object names", () => {
-  // Shard n is `shard-<n>` in decimal; a Creator's object is its Creator ID (ADR 0008).
+describe("object names", { tags: ["adr-0008"] }, () => {
   it.each([
     [0, "shard-0"],
     [7, "shard-7"],
@@ -74,8 +66,7 @@ describe("object names", () => {
   });
 });
 
-describe("linksKey", () => {
-  // `<shard as 2 lowercase hex digits>:<Namespace ID>:<exact Short code>` (ADRs 0008, 0014).
+describe("linksKey", { tags: ["adr-0008", "adr-0014", "adr-0018"] }, () => {
   it.each([
     ["default", "Ab3xYz9", "27:default:Ab3xYz9"],
     ["default", "ab3xyz9", "27:default:ab3xyz9"],
@@ -90,9 +81,7 @@ describe("linksKey", () => {
   });
 });
 
-describe("LINKS values", () => {
-  // Versioned JSON, `v:1` (ADR 0008). A tombstone carries `dt` and `by` (ADR 0028),
-  // and drops the Target URL and the Expiry.
+describe("LINKS values", { tags: ["adr-0008", "adr-0028"] }, () => {
   const vectors: [string, LinksValue, string][] = [
     [
       "a live Link with an Expiry",
@@ -111,8 +100,7 @@ describe("LINKS values", () => {
       '{"v":1,"t":"https://example.com/","c":"cr_4fK9pQ2xZ7","ts":1791244800000}',
     ],
     [
-      // Only `"` and `\` are escaped; `/` and non-ASCII characters are written as UTF-8.
-      "a live Link whose Target URL needs escaping",
+      "a live Link whose Target URL escapes only its quotes and backslash",
       { state: "live", targetUrl: 'web+demo:say "hi"\\there/café/日本', creatorId: "cr_4fK9pQ2xZ7", createdAt: 1791244800000 },
       String.raw`{"v":1,"t":"web+demo:say \"hi\"\\there/café/日本","c":"cr_4fK9pQ2xZ7","ts":1791244800000}`,
     ],
@@ -160,10 +148,7 @@ describe("LINKS values", () => {
   });
 });
 
-describe("keyedCandidate", () => {
-  // Candidate n of a keyed create (ADR 0009): SHA-256 over `<Creator ID>:<key>:<n>`,
-  // the first 8 bytes as a big-endian integer mod 62^7, base62 (0-9, A-Z, a-z),
-  // zero-padded to 7 characters.
+describe("keyedCandidate", { tags: ["adr-0009"] }, () => {
   it.each([
     ["cr_4fK9pQ2xZ7", "3f0c9a52-7d1e-4b8a-9c6f-2e5d8b1a4c70", 0, "mTeYY8I"],
     ["cr_4fK9pQ2xZ7", "3f0c9a52-7d1e-4b8a-9c6f-2e5d8b1a4c70", 1, "QSEAueU"],
@@ -177,9 +162,7 @@ describe("keyedCandidate", () => {
   });
 });
 
-describe("targetUrlSha256", () => {
-  // Lowercase hex SHA-256 over the UTF-8 bytes of the stored Target URL, which
-  // fills `target_url_sha256` when a Link is deleted (ADR 0019).
+describe("targetUrlSha256", { tags: ["adr-0019"] }, () => {
   it.each([
     ["https://example.com/", "0f115db062b7c0dd030b16878c99dea5c354b49dc37b38eb8846179c7783e9d7"],
     [

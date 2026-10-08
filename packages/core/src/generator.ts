@@ -1,11 +1,6 @@
 import type { ShortCodeGenerator } from "./ports.ts";
 import { BASE62_ALPHABET, GENERATED_LENGTH } from "./short-code.ts";
 
-/**
- * Draws 7 base62 characters from the platform's CSPRNG (ADR 0002). Web Crypto
- * exists in Workers, Node and browsers alike, so this is the production
- * generator everywhere. Each character is drawn without modulo bias.
- */
 export class RandomShortCodeGenerator implements ShortCodeGenerator {
   generate(): string {
     let shortCode = "";

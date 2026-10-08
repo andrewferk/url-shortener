@@ -1,79 +1,53 @@
-// Every permanent encoding the service writes. Each function here is pinned by
-// test vectors and never changes once data exists (ADR 0008): changing one
-// means moving every Link.
-import type { CreatorId, LinkId, NamespaceId } from "./link-id.ts";
+// These encodings are permanent: changing one once data exists means moving
+// every Link.
+import type { CreatorId, EpochMs, LinkId, NamespaceId } from "./link-id.ts";
 import { BASE62_ALPHABET, GENERATED_LENGTH } from "./short-code.ts";
 
-/** Lowercases ASCII letters, the only case a Short code can have (ADR 0018). */
 export function fold(shortCode: string): string {
+  // Not `toLowerCase`: Unicode case mapping would move some non-ASCII strings onto an ASCII code's shard.
   return shortCode.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
-/**
- * The shard a Link lives on, 0–255: the first byte of SHA-256 over the UTF-8
- * bytes of `<Namespace ID>:<fold(Short code)>` (ADRs 0008, 0014, 0018). Every
- * case variant of a Short code lands on the same shard.
- */
 export async function shardNumber(namespace: NamespaceId, shortCode: string): Promise<number> {
   const digest = await sha256(`${namespace}:${fold(shortCode)}`);
   return digest[0] ?? 0;
 }
 
-/** Shard n's Durable Object name, with n in decimal (ADR 0008). */
 export function shardObjectName(shard: number): string {
   return `shard-${String(shard)}`;
 }
 
-/** A Creator's Durable Object name: its Creator ID (ADR 0008). */
 export function creatorObjectName(creatorId: CreatorId): string {
   return creatorId;
 }
 
-/**
- * A Link's key in `LINKS`: `<shard as 2 lowercase hex digits>:<Namespace ID>:<Short code>`,
- * with the exact, case-sensitive Short code (ADRs 0008, 0014, 0018).
- */
 export async function linksKey(id: LinkId): Promise<string> {
   const shard = await shardNumber(id.namespace, id.shortCode);
   return `${shard.toString(16).padStart(2, "0")}:${id.namespace}:${id.shortCode}`;
 }
 
-/**
- * What `LINKS` holds for one Link: everything a Redirect needs, plus the
- * Creator and creation time that make KV a second copy (ADR 0008). The shard
- * answers a KV miss with the same shape.
- */
 export type LinksValue = LiveLinksValue | TombstoneLinksValue;
 
 export interface LiveLinksValue {
   readonly state: "live";
   readonly targetUrl: string;
-  /** Epoch ms. Absent when the Link has no Expiry. */
-  readonly expiresAt?: number;
+  readonly expiresAt?: EpochMs;
   readonly creatorId: CreatorId;
-  readonly createdAt: number;
+  readonly createdAt: EpochMs;
 }
 
-/** A Deleted link's value: no Target URL and no Expiry (ADRs 0008, 0028). */
 export interface TombstoneLinksValue {
   readonly state: "deleted";
   readonly creatorId: CreatorId;
-  readonly createdAt: number;
-  readonly deletedAt: number;
+  readonly createdAt: EpochMs;
+  readonly deletedAt: EpochMs;
   readonly deletedBy: DeletedBy;
 }
 
-/** A Creator's own delete, or the Operator's Takedown. */
 export type DeletedBy = "creator" | "operator";
 
-/**
- * The `v:1` JSON stored in `LINKS`. Key order is part of the format:
- * live `{"v":1,"t":…,"e":…,"c":…,"ts":…}`, with `e` left out when there is no
- * Expiry, and tombstone `{"v":1,"d":1,"c":…,"ts":…,"dt":…,"by":…}`. Strings
- * are escaped as `JSON.stringify` does: `"`, `\` and control characters only,
- * with `/` and non-ASCII characters written as UTF-8.
- */
 export function encodeLinksValue(value: LinksValue): string {
+  // Key order is part of the stored format, so these literals must not be reordered.
   if (value.state === "deleted") {
     return JSON.stringify({
       v: 1,
@@ -93,11 +67,7 @@ export function encodeLinksValue(value: LinksValue): string {
   });
 }
 
-/**
- * Reads a `LINKS` value already parsed from JSON (KV's `type: "json"`). It
- * reads every `v` ever written, which today is only `v:1`, and throws on
- * anything else: a value this code can't read is a bug, never a 404.
- */
+/** Throws on a value it can't read: that is a bug, never a 404. */
 export function decodeLinksValue(json: unknown): LinksValue {
   if (!isRecord(json) || json["v"] !== 1) throw new Error("Unreadable LINKS value: unknown version");
   const creatorId = json["c"];
@@ -128,12 +98,6 @@ export function decodeLinksValue(json: unknown): LinksValue {
   };
 }
 
-/**
- * Candidate n (0, 1, 2, …) for a keyed create's generated Short code
- * (ADR 0009): SHA-256 over the UTF-8 bytes of `<Creator ID>:<key>:<n>`, with n
- * in decimal; the first 8 bytes read as a big-endian unsigned integer, reduced
- * mod 62^7, and base62-encoded, zero-padded to 7 characters.
- */
 export async function keyedCandidate(creatorId: CreatorId, idempotencyKey: string, n: number): Promise<string> {
   const digest = await sha256(`${creatorId}:${idempotencyKey}:${String(n)}`);
   let value = new DataView(digest.buffer).getBigUint64(0) % CODE_SPACE;
@@ -147,10 +111,6 @@ export async function keyedCandidate(creatorId: CreatorId, idempotencyKey: strin
 
 const CODE_SPACE = 62n ** BigInt(GENERATED_LENGTH);
 
-/**
- * The value of `target_url_sha256`: lowercase hex SHA-256 over the UTF-8 bytes
- * of the stored, normalized Target URL (ADR 0019).
- */
 export async function targetUrlSha256(targetUrl: string): Promise<string> {
   const digest = await sha256(targetUrl);
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");

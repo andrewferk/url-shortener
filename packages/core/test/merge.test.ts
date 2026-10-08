@@ -23,9 +23,7 @@ function voids(at: number): VoidRecord {
   return { namespace: "default", shortCode: "Ab3xYz9", deletedAt: at };
 }
 
-// The change log's merge rule: the deleted one wins, unless that delete is
-// voided (ADRs 0008, 0019, 0028). Replay needs no ordering.
-describe("mergeLinkRecords", () => {
+describe("mergeLinkRecords", { tags: ["adr-0008", "adr-0019", "adr-0028"] }, () => {
   it("keeps the live record when there is nothing else", () => {
     expect(mergeLinkRecords([live, live], [])).toEqual(live);
   });

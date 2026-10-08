@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BASE62_ALPHABET, RandomShortCodeGenerator } from "@url-shortener/core";
 
-describe("RandomShortCodeGenerator", () => {
+describe("RandomShortCodeGenerator", { tags: ["adr-0002"] }, () => {
   const generator = new RandomShortCodeGenerator();
   const draws = Array.from({ length: 2000 }, () => generator.generate());
 
