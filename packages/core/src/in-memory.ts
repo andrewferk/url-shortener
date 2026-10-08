@@ -17,11 +17,11 @@ import type {
 export class InMemoryLinkStore implements LinkRegistry, LinkReader {
   readonly #links = new Map<string, Link>();
 
-  claim(link: Link): Promise<ClaimResult> {
+  async claim(link: Link): Promise<ClaimResult> {
     const existing = this.#links.get(storeKey(link));
-    if (existing !== undefined) return Promise.resolve({ claimed: false, existing });
+    if (existing !== undefined) return { claimed: false, existing };
     this.#links.set(storeKey(link), link);
-    return Promise.resolve({ claimed: true });
+    return { claimed: true };
   }
 
   async delete(id: LinkId, deleter: Deleter, at: number): Promise<DeleteResult> {
@@ -30,9 +30,9 @@ export class InMemoryLinkStore implements LinkRegistry, LinkReader {
     return result;
   }
 
-  read(id: LinkId): Promise<LinksValue | null> {
+  async read(id: LinkId): Promise<LinksValue | null> {
     const link = this.#links.get(storeKey(id));
-    return Promise.resolve(link === undefined ? null : toLinksValue(link));
+    return link === undefined ? null : toLinksValue(link);
   }
 }
 
@@ -91,8 +91,8 @@ export class InMemoryCreatorAuthenticator implements CreatorAuthenticator {
     this.#creators = new Map(Object.entries(creators));
   }
 
-  authenticate(credential: string): Promise<AuthenticatedCreator | null> {
-    return Promise.resolve(this.#creators.get(credential) ?? null);
+  async authenticate(credential: string): Promise<AuthenticatedCreator | null> {
+    return this.#creators.get(credential) ?? null;
   }
 }
 
@@ -103,7 +103,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
     this.#namespaces = new Map(Object.entries(namespaces).map(([hostname, namespace]) => [hostname.toLowerCase(), namespace]));
   }
 
-  resolve(hostname: string): Promise<NamespaceId | null> {
-    return Promise.resolve(this.#namespaces.get(hostname.toLowerCase()) ?? null);
+  async resolve(hostname: string): Promise<NamespaceId | null> {
+    return this.#namespaces.get(hostname.toLowerCase()) ?? null;
   }
 }

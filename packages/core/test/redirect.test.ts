@@ -13,7 +13,7 @@ function setup() {
   const links = new InMemoryLinkStore();
   const clock = new ManualClock(created);
   const namespaces = new StaticNamespaceResolver({ "short.test": "default", "acme.test": "ns_Q7f3kPz9Lm" });
-  const redirect = (url: string) => {
+  const redirect = async (url: string) => {
     const { hostname, pathname } = new URL(url);
     return decideRedirect({ hostname, path: pathname }, { namespaces, links, clock });
   };
@@ -66,9 +66,11 @@ describe("decideRedirect", { tags: ["adr-0001", "adr-0014", "adr-0018"] }, () =>
 
   describe("the malformed shape check", { tags: ["adr-0004"] }, () => {
     const neverRead = {
-      read: () => Promise.reject(new Error("a malformed request must never reach storage")),
+      read: async () => {
+        throw new Error("a malformed request must never reach storage");
+      },
     };
-    const decide = (hostname: string, path: string) =>
+    const decide = async (hostname: string, path: string) =>
       decideRedirect(
         { hostname, path },
         { namespaces: new StaticNamespaceResolver({ "short.test": "default" }), links: neverRead, clock: new ManualClock(created) },

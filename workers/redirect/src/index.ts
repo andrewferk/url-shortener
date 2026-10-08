@@ -3,7 +3,7 @@ import { type Clock, decideRedirect, type LinkReader, StaticNamespaceResolver } 
 // No Short domain is configured and `LINKS` is not read yet, so no hostname
 // maps to a Namespace, no Link exists, and every Redirect is a 404.
 const namespaces = new StaticNamespaceResolver({});
-const links: LinkReader = { read: () => Promise.resolve(null) };
+const links: LinkReader = { read: async () => null };
 const clock: Clock = { now: () => Date.now() };
 
 export default {

@@ -51,6 +51,14 @@ The core also never depends on another workspace package ([ADR 0015](./docs/adr/
 
 Import a workspace package by its name, such as `@url-shortener/core`, so you get only what its `exports` map exposes. A deep import such as `@url-shortener/core/src/redirect.ts`, or a relative path into another workspace, fails the lint.
 
+### Asynchronous code uses `async` and `await`
+
+A function that returns a Promise is declared `async`, and waits with `await`, not `.then()`. One with nothing to await still returns its value plainly, so write `async read() { return null; }`, not `read() { return Promise.resolve(null); }`, and `throw` rather than return `Promise.reject(...)`.
+
+Reach for the Promise API only where `await` can't say it: `Promise.all`, `Promise.allSettled` or `Promise.race` over operations that don't depend on each other, so they run at once instead of one after another.
+
+The lint enforces the first rule with `@typescript-eslint/promise-function-async`. It turns off `@typescript-eslint/require-await`, which would fail an `async` function with nothing to await.
+
 ### Workflows ask for as little as they can
 
 Every workflow declares a top-level `permissions:` block ([ADR 0025](./docs/adr/0025-keep-a-locked-off-account-copy-of-the-change-log-and-state-what-every-operator-must-protect.md)). At the top level it may grant only `read` or `none`. A job that needs to write is granted that on the job itself, and no job is granted `read-all` or `write-all`.
