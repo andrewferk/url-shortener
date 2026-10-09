@@ -61,6 +61,8 @@ Every action and reusable workflow from another repository is pinned by a full c
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 ```
 
+An action released from a monorepo under a prefixed tag keeps that tag whole in the comment, such as `# comment-guard-v0.3.0`.
+
 Dependabot opens the pull requests that move these pins. `npm run lint:workflows` checks both rules.
 
 The one exception is an example ops-repo caller under `examples/`: it may call a reusable workflow by release tag, such as `@v0.1.0`, because Operators pin this repo's releases by tag ([ADR 0015](./docs/adr/0015-apache-2-and-every-deployment-runs-from-its-own-ops-repo.md)). Its actions are still pinned by SHA.
@@ -80,7 +82,7 @@ This repository never holds a deployment's values: no domain, account ID, zone I
 
 ### Comments cite no document
 
-Names, types and test names carry the facts about the code. A comment is for a non-obvious why that none of those can hold, and it states the fact without naming where it came from: no comment cites an ADR, issue, pull request, slice or spec section. This holds in every source and config file, including Terraform, workflows and ESLint config. Markdown is exempt, so docs such as this file cite ADRs freely, and a lint rule's message may name the ADR it enforces, because the reader has just broken it. CI checks the lines each pull request adds with the comment-guard action; it covers the source languages the plugin lists, which do not yet include Terraform, workflows or the ESLint config.
+Names, types and test names carry the facts about the code. A comment is for a non-obvious why that none of those can hold, and it states the fact without naming where it came from: no comment cites an ADR, issue, pull request, slice or spec section. This holds in every source and config file, including Terraform, workflows and ESLint config. Markdown is exempt, so docs such as this file cite ADRs freely, and a lint rule's message may name the ADR it enforces, because the reader has just broken it. CI checks the lines each pull request adds with the comment-guard action; it covers the [source languages the plugin lists](https://github.com/andrewferk/claude-plugins/tree/main/plugins/comment-guard#what-it-does), which do not yet include Terraform, workflows or the ESLint config.
 
 The link between a change and its decision lives in the pull request, the commit and the test:
 

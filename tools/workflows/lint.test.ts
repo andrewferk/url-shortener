@@ -130,7 +130,7 @@ jobs:
         },
       );
 
-      it.each([`actions/checkout@${sha}`, `actions/checkout@${sha} # pinned`, `actions/checkout@${sha} # main`, `some-org/monorepo/plugins/tool@${sha} # tool-main`])(
+      it.each([`actions/checkout@${sha}`, `actions/checkout@${sha} # pinned`, `actions/checkout@${sha} # main`, `some-org/monorepo/plugins/tool@${sha} # tool-main`, `some-org/monorepo/plugins/tool@${sha} # tool-1`])(
         "fails %s",
         (uses) => {
           expect(lintWorkflow(step(uses))).toEqual([
