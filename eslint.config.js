@@ -28,6 +28,10 @@ export default defineConfig(
     plugins: { "url-shortener": plugin },
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", { patterns: workspaceImports }],
+      "@typescript-eslint/promise-function-async": "error",
+      // Off because it fails the `async` that promise-function-async requires
+      // of a function with nothing to await.
+      "@typescript-eslint/require-await": "off",
     },
   },
   {

@@ -15,3 +15,7 @@ Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/ag
 ### Code comments
 
 A comment never cites an ADR, issue, PR, slice or spec section; links go in the PR description, commit trailers and `adr-NNNN` test tags. See `CONTRIBUTING.md`, "Comments cite no document".
+
+### Async code
+
+A function returning a Promise is `async` and uses `await`; no `.then()`, `Promise.resolve` or `Promise.reject`. `Promise.all` and its kin are for independent operations run at once. See `CONTRIBUTING.md`, "Asynchronous code uses `async` and `await`".
