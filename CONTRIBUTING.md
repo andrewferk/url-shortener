@@ -82,7 +82,7 @@ This repository never holds a deployment's values: no domain, account ID, zone I
 
 ### Comments cite no document
 
-Names, types and test names carry the facts about the code. A comment is for a non-obvious why that none of those can hold, and it states the fact without naming where it came from: no comment cites an ADR, issue, pull request, slice or spec section. This holds in every source and config file, including Terraform, workflows and ESLint config. Markdown is exempt, so docs such as this file cite ADRs freely, and a lint rule's message may name the ADR it enforces, because the reader has just broken it. CI checks the lines each pull request adds with the comment-guard action; it covers the [source languages the plugin lists](https://github.com/andrewferk/claude-plugins/tree/main/plugins/comment-guard#what-it-does), which do not yet include Terraform, workflows or the ESLint config.
+Names, types and test names carry the facts about the code. A comment is for a non-obvious why that none of those can hold, and it states the fact without naming where it came from: no comment cites an ADR, issue, pull request, slice or spec section. This holds in every source and config file, including Terraform, workflows and ESLint config. Markdown is exempt, so docs such as this file cite ADRs freely, and a lint rule's message may name the ADR it enforces, because the reader has just broken it. CI checks the lines each pull request adds with the comment-guard action.
 
 The link between a change and its decision lives in the pull request, the commit and the test:
 
