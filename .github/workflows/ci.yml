@@ -75,10 +75,20 @@ jobs:
           tofu_wrapper: false
       - run: tools/tofu-validate.sh
 
+  comments:
+    name: Comment guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: andrewferk/claude-plugins/plugins/comment-guard@5025290b3c73201501d1ed72157c4aa3d9e9e18f # comment-guard-v0.3.0
+
   ci:
     name: CI
     if: always()
-    needs: [lint, unit, integration, tofu]
+    needs: [lint, unit, integration, tofu, comments]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
