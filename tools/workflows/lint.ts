@@ -15,7 +15,7 @@ const pinnedByReleaseTag = /^[^@\s]+@v\d+\.\d+\.\d+$/;
 const pinnedByDigest = /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/;
 // A trailing comment that starts with the pinned version, such as `# v7.0.1`,
 // which Dependabot reads and rewrites when it moves the SHA.
-const versionComment = /^\s+#\s*v?\d+(?:\.\d+)*\b/;
+const versionComment = /^\s+#\s*(?:[\w.-]+-)?v?\d+(?:\.\d+)*\b/;
 
 export function lintWorkflow(source: string, options: Options = {}): Problem[] {
   const lineCounter = new LineCounter();

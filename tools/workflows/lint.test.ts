@@ -123,14 +123,14 @@ jobs:
       - uses: ${uses}
 `);
 
-      it.each([`actions/checkout@${sha} # v7.0.1`, `actions/checkout@${sha}  #v7`, `actions/checkout@${sha} # 7.0.1`, `"actions/checkout@${sha}" # v7.0.1`])(
+      it.each([`actions/checkout@${sha} # v7.0.1`, `actions/checkout@${sha}  #v7`, `actions/checkout@${sha} # 7.0.1`, `"actions/checkout@${sha}" # v7.0.1`, `some-org/monorepo/plugins/tool@${sha} # tool-v0.3.0`])(
         "passes %s",
         (uses) => {
           expect(lintWorkflow(step(uses))).toEqual([]);
         },
       );
 
-      it.each([`actions/checkout@${sha}`, `actions/checkout@${sha} # pinned`, `actions/checkout@${sha} # main`])(
+      it.each([`actions/checkout@${sha}`, `actions/checkout@${sha} # pinned`, `actions/checkout@${sha} # main`, `some-org/monorepo/plugins/tool@${sha} # tool-main`])(
         "fails %s",
         (uses) => {
           expect(lintWorkflow(step(uses))).toEqual([
